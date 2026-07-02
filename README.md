@@ -1,4 +1,4 @@
-# ![phylogeoflow](docs/images/phylogeoflow_logo.png)
+# ![phylogeoflow](docs/images/phylogeoflow_logo.png) [UNDER ACTIVE DEVELOPMENT]
 
 [![GitHub Actions CI Status](https://github.com/kibet-gilbert/phylogeoflow/actions/workflows/ci.yml/badge.svg)](https://github.com/kibet-gilbert/phylogeoflow/actions/workflows/ci.yml)
 [![GitHub Actions Linting Status](https://github.com/kibet-gilbert/phylogeoflow/actions/workflows/linting.yml/badge.svg)](https://github.com/kibet-gilbert/phylogeoflow/actions/workflows/linting.yml)
