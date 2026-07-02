@@ -12,9 +12,9 @@
 
 ## Introduction
 
-**phylogeoflow** is a reusable, end-to-end [Nextflow](https://www.nextflow.io) pipeline for the **phylogenetic, biodiversity, and phylogeographic meta-analysis of any target taxon**, integrating molecular data with environmental and anthropogenic covariates to explain the drivers of species distribution and genetic structure.
+**phylogeoflow** is a reusable, end-to-end [Nextflow](https://www.nextflow.io) pipeline for the **phylogenetic, biodiversity, and phylogeographic meta-analysis of any target taxon**. It's goal is to integrate molecular data with environmental and anthropogenic covariates to explain the drivers of species distribution and genetic structure.
 
-It is the pipeline-ified successor to the [`co1_metaanalysis`](https://github.com/kibet-gilbert/co1_metaanalysis) MSc thesis project, which analysed COI barcodes of East African arthropods. phylogeoflow generalises that work from a collection of bespoke scripts into a portable, reproducible, nf-core-style workflow that can be re-targeted at any taxon — fruit-fly pests (*Ceratitis*, Tephritidae), disease vectors (biting Diptera), or any other group — and applied **iteratively at any rank** (species, genus, family, order, or higher).
+It is the 'pipeline-ified' successor to the [`co1_metaanalysis`](https://github.com/kibet-gilbert/co1_metaanalysis) MSc thesis project, which analysed COI barcodes of East African arthropods. phylogeoflow generalises that work from a collection of bespoke scripts into a portable, reproducible, nf-core-style workflow that can be re-targeted at any taxon - fruit-fly pests (*Ceratitis*, Tephritidae), disease vectors (biting Diptera), or any other group - and applied **iteratively at any rank** (species, genus, family, order, or higher).
 
 The pipeline is written in Nextflow DSL2, uses one Conda environment / container per process for trivial installation and bit-for-bit reproducibility, and follows [nf-core](https://nf-co.re/) structure and conventions.
 
@@ -22,20 +22,31 @@ The pipeline is written in Nextflow DSL2, uses one Conda environment / container
 > phylogeoflow adopts nf-core structure and tooling but is developed independently and is not (yet) an official nf-core pipeline.
 
 > [!IMPORTANT]
-> This README documents the **full intended scope** of phylogeoflow to guide its development. Modules move through three maturity states, marked throughout: ✅ **implemented**, 🚧 **scaffolded** (module/subworkflow stubs exist, logic being wired), 📋 **planned** (designed, not yet scaffolded). See the [Roadmap](#roadmap) for status at a glance.
+> This README documents the **full intended scope** of phylogeoflow to guide its development. Modules move through three maturity states, marked throughout: 
+> - ✅ **implemented**, 
+> - 🚧 **scaffolded** (module/subworkflow stubs exist, logic being wired), 
+> - 📋 **planned** (designed, not yet scaffolded).     
+See the [Roadmap](#roadmap) for status at a glance.
 
 ## Scientific background & rationale
 
 Many economically and medically important insect groups form **cryptic species complexes** that are hard to resolve on morphology alone. The pilot taxon, genus *Ceratitis* (Tephritidae), contains major frugivorous pests whose FAR/FARQ complex has repeatedly been re-delimited. Resolving such complexes requires **integrative taxonomy**: pooling all available molecular evidence, testing species boundaries statistically, and asking whether observed genetic structure is explained by geography, environment, or history.
 
-phylogeoflow operationalises this in two parts:
+**`phylogeoflow`** operationalises this in two parts:
 
 - **Part 1 — Molecular meta-analysis:** harvest and harmonise all public sequence/occurrence data for a taxon; align, infer phylogeny, delimit species, and characterise population structure and phylogeographic differentiation.
 - **Part 2 — Environmental integration:** retrieve climate, vegetation, topographic, hydrological, and human-population layers; run ecological niche / species distribution models (ENM/SDM); and test isolation-by-distance (IBD) vs isolation-by-environment (IBE) to explain the genetic structure found in Part 1.
 
+
 ## Pipeline summary
 
-Organised as retrieval → curation → phylogenetics → phylogeography, with an environmental branch feeding niche modelling and landscape genetics.
+This pipeline has been designed with two two concepts in mind:   
+ - **`--step N` (or a name):** to run stages 1..N of the linear Part-1 chain.   
+ - **Independent branches:** Part 2 (environmental branch) to run alone because it only needs occurrence data, not the phylogenetics chain and can be launched separately.   
+
+It is organised in two parts as:  
+> a) ***retrieval*** → ***curation*** → ***aligment(MSA)*** → ***phylogenetics*** → ***species-delimitation*** → ***phylogeography***
+> b) ***retrieval*** → ***EDM*** → ***SDM*** → ***landscape-genetics***.
 
 ### Part 1 — Molecular data
 
@@ -142,22 +153,69 @@ nextflow run . -profile test_stub,docker -stub
 
 ### 3. Minimal real run
 
+- Run linear chain for Part 1 (stages 1-6) as one cumulative `--step` parameter:  **`--step 6`** (the default) runs the whole Part-1 chain.   
 ```bash
 nextflow run kibet-gilbert/phylogeoflow \
    -profile docker \
    --target_taxon Ceratitis \
+   --step 6 \
    --taxon_rank genus \
    --markers COI-5P \
    --geography Kenya,Uganda,Tanzania \
    --country_codes KE,UG,TZ \
    --outdir results
 ```
+**`--step 3`** runs ***retrieval*** + ***curation*** + ***alignment***;   
+Each stage is wrapped in **`if ( runStage(N, target) )`**, and the **`resolveStep()`** helper accepts either a number or a stage name (**`--step curation`** is the same as **`--step 2`**). With this the pipeline can be run sequentially as follows:   
+- Step 1: retrieve, then inspect results/retrieval/ to confirm downloads: **`--step 1`** runs only retrieval.   
+ ```bash
+nextflow run kibet-gilbert/phylogeoflow \
+   --target_taxon Ceratitis \
+   --step 1 \
+   -profile docker \
+   --outdir results
+```
+- Looks good? Continue to step 2 — retrieval is cached, only curation runs
+```bash
+nextflow run kibet-gilbert/phylogeoflow \
+   --target_taxon Ceratitis \
+   --step 2 \
+   -resume \ # makes it resume from step 1
+   -profile docker \
+   --outdir results
+```
+- All checks out? Continue to step 3, and so on
+```bash
+nextflow run kibet-gilbert/phylogeoflow \
+   --target_taxon Ceratitis \
+   --step 3 \
+   -resume \
+   -profile docker \
+   --outdir results
+ ```
+
+Or target part-2 (7,8,9 - environmental modelling element) independently by their own `--run_*` toggles:   
+Run retrieval + environmental, skipping stages 2-6 entirely because it needs only occurrence data.   
+```bash
+nextflow run kibet-gilbert/phylogeoflow \
+   -profile docker \
+   --target_taxon Ceratitis \
+   --step 1 \
+   --run_environmental \
+   --outdir results
+```
+The workflow encodes the real dependencies with warnings.    
+This lets you run branches in any valid combination without forcing the full chain:   
+>SDM (8) warns if you enable it without --run_environmental; 
+>landscape genetics (9) warns if --step is below 6 (it needs phylogeography) or environmental isn't set. 
 
 ### 4. Reproducible run via a taxon params file (preferred)
 
 ```bash
-nextflow run kibet-gilbert/phylogeoflow -profile docker \
-   -params-file conf/taxa/ceratitis.yml --outdir results
+nextflow run kibet-gilbert/phylogeoflow \
+   -profile docker \
+   -params-file conf/taxa/ceratitis.yml \
+   --outdir results
 ```
 
 ### 5. Iterating over a high-rank taxon
