@@ -1,0 +1,9 @@
+# conf/taxa/ceratitis.yml
+target_taxon: "Ceratitis"
+taxon_rank:   "genus"
+geography:    ["Kenya","Uganda","Tanzania","Rwanda","Burundi","Ethiopia","South Sudan"]
+markers:      ["COI-5P","16S","ND6","trnP","period","ITS1"]
+outgroups:    ["Trirhithrum","Capparimyia"]
+min_seq_len:  500
+classifier_set:  "CO1v4.0"
+iterate_rank: false        # set true to split a high-rank taxon into child taxa and loop

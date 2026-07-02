@@ -1,0 +1,456 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://raw.githubusercontent.com/kibet-gilbert/phylogeoflow/master/nextflow_schema.json",
+    "title": "kibet-gilbert/phylogeoflow pipeline parameters",
+    "description": "Phylogenetic, biodiversity & phylogeographic meta-analysis pipeline for arbitrary target taxa, integrating molecular and environmental data.",
+    "type": "object",
+    "$defs": {
+        "core_query": {
+            "title": "Core query",
+            "type": "object",
+            "description": "Define the target taxon, its rank, and run identity. Applies to the whole pipeline.",
+            "required": ["target_taxon"],
+            "fa_icon": "fas fa-bullseye",
+            "properties": {
+                "target_taxon": {
+                    "type": "string",
+                    "description": "Target taxon name to retrieve (any rank).",
+                    "help_text": "e.g. 'Ceratitis' (genus), 'Diptera' (order), 'Ceratitis capitata' (species).",
+                    "fa_icon": "fas fa-bug"
+                },
+                "taxon_rank": {
+                    "type": "string",
+                    "default": "genus",
+                    "enum": ["species", "genus", "family", "order", "class", "phylum"],
+                    "description": "Rank of the target taxon. Ranks above genus fan out over child taxa iteratively.",
+                    "fa_icon": "fas fa-layer-group"
+                },
+                "run_id": {
+                    "type": "string",
+                    "description": "Short label for this run (defaults to a slug of target_taxon).",
+                    "fa_icon": "fas fa-tag"
+                },
+                "outdir": {
+                    "type": "string",
+                    "format": "directory-path",
+                    "default": "results",
+                    "description": "Output directory for all results.",
+                    "fa_icon": "fas fa-folder-open"
+                }
+            }
+        },
+        "p1_1_data_retrieval": {
+            "title": "Part 1.1: Data retrieval",
+            "type": "object",
+            "description": "Which sequence/occurrence databases to query and how (BOLD, GenBank, GBIF).",
+            "fa_icon": "fas fa-database",
+            "properties": {
+                "databases": {
+                    "type": "string",
+                    "default": "bold,genbank,gbif",
+                    "pattern": "^((bold|genbank|gbif)(,(bold|genbank|gbif))*)$",
+                    "description": "Comma-separated subset of databases to query.",
+                    "fa_icon": "fas fa-database"
+                },
+                "genbank_engine": {
+                    "type": "string",
+                    "default": "edirect",
+                    "enum": ["edirect", "rentrez", "both"],
+                    "description": "GenBank retrieval engine. 'both' runs the two side by side for comparison.",
+                    "fa_icon": "fas fa-code-branch"
+                },
+                "markers": {
+                    "type": "string",
+                    "default": "COI-5P",
+                    "description": "Marker(s) to retrieve (comma-separated or a list in a params file).",
+                    "help_text": "e.g. 'COI-5P,16S,ND6'. BCDM marker codes for BOLD; [Gene] terms for GenBank.",
+                    "fa_icon": "fas fa-dna"
+                },
+                "geography": {
+                    "type": "string",
+                    "description": "Country names for BOLD/GenBank filtering (comma-separated or list).",
+                    "help_text": "e.g. 'Kenya,Uganda,Tanzania'.",
+                    "fa_icon": "fas fa-globe-africa"
+                },
+                "country_codes": {
+                    "type": "string",
+                    "description": "ISO2 country codes for GBIF filtering (comma-separated or list).",
+                    "help_text": "e.g. 'KE,UG,TZ,RW,BI,ET,SS'.",
+                    "fa_icon": "fas fa-flag"
+                },
+                "min_seq_len": {
+                    "type": "integer",
+                    "default": 500,
+                    "minimum": 0,
+                    "description": "Minimum sequence length (bp) to retain.",
+                    "fa_icon": "fas fa-ruler-horizontal"
+                },
+                "max_seq_len": {
+                    "type": "integer",
+                    "description": "Maximum sequence length (bp) to retain (optional).",
+                    "fa_icon": "fas fa-ruler"
+                },
+                "min_year": {
+                    "type": "integer",
+                    "description": "Earliest collection/publication year to retain (optional).",
+                    "fa_icon": "fas fa-calendar"
+                },
+                "genbank_batch": {
+                    "type": "integer",
+                    "default": 200,
+                    "description": "Records per GenBank efetch/rentrez batch.",
+                    "fa_icon": "fas fa-boxes"
+                },
+                "bold_batch": {
+                    "type": "integer",
+                    "default": 5000,
+                    "description": "processids per BOLD bold.fetch batch.",
+                    "fa_icon": "fas fa-boxes"
+                },
+                "entrez_key": {
+                    "type": "string",
+                    "description": "NCBI Entrez API key (optional; raises rate limit). Prefer a secret.",
+                    "fa_icon": "fas fa-key"
+                }
+            }
+        },
+        "p1_2_curation": {
+            "title": "Part 1.2: Curation & harmonisation",
+            "type": "object",
+            "description": "Cross-database merge/dedup, coordinate-quality filtering, and taxonomic (re)classification.",
+            "fa_icon": "fas fa-broom",
+            "properties": {
+                "max_coord_err": {
+                    "type": "integer",
+                    "description": "Maximum coordinate uncertainty (metres) to retain (optional).",
+                    "fa_icon": "fas fa-crosshairs"
+                },
+                "harmonize_prefer": {
+                    "type": "string",
+                    "default": "bold",
+                    "enum": ["bold", "genbank"],
+                    "description": "When the same specimen appears in multiple databases, which source to keep.",
+                    "fa_icon": "fas fa-code-merge"
+                },
+                "run_classification": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Run RDPClassifier taxonomic (re)assignment.",
+                    "fa_icon": "fas fa-sitemap"
+                },
+                "classifier_trainset": {
+                    "type": "string",
+                    "default": "CO1v4.0",
+                    "description": "COI eukaryote training set version for RDPClassifier.",
+                    "fa_icon": "fas fa-graduation-cap"
+                },
+                "classifier_min_bootstrap": {
+                    "type": "number",
+                    "default": 1.0,
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Minimum classification bootstrap support to retain an assignment.",
+                    "fa_icon": "fas fa-percent"
+                }
+            }
+        },
+        "p1_3_alignment": {
+            "title": "Part 1.3: Alignment & trimming",
+            "type": "object",
+            "description": "Multiple sequence alignment, alignment-quality evaluation, and trimming.",
+            "fa_icon": "fas fa-align-center",
+            "properties": {
+                "aligner": {
+                    "type": "string",
+                    "default": "mafft",
+                    "enum": ["mafft", "pasta", "tcoffee"],
+                    "description": "Multiple sequence alignment engine.",
+                    "fa_icon": "fas fa-align-left"
+                },
+                "run_tcs": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Compute T-Coffee CORE/TCS alignment reliability scores.",
+                    "fa_icon": "fas fa-check-double"
+                },
+                "run_bmge": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Trim ambiguous/saturated regions with BMGE.",
+                    "fa_icon": "fas fa-cut"
+                },
+                "bmge_entropy": {
+                    "type": "number",
+                    "default": 0.5,
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "BMGE maximum entropy threshold for column removal.",
+                    "fa_icon": "fas fa-sliders-h"
+                }
+            }
+        },
+        "p1_4_phylogenetics": {
+            "title": "Part 1.4: Phylogenetic inference",
+            "type": "object",
+            "description": "Substitution-model selection, tree inference, support, and placement.",
+            "fa_icon": "fas fa-tree",
+            "properties": {
+                "tree_method": {
+                    "type": "string",
+                    "default": "iqtree",
+                    "enum": ["iqtree", "raxml-ng", "fasttree"],
+                    "description": "Maximum-likelihood tree inference engine.",
+                    "fa_icon": "fas fa-tree"
+                },
+                "model_selection": {
+                    "type": "string",
+                    "default": "modelfinder",
+                    "enum": ["modelfinder", "modeltest-ng", "fixed"],
+                    "description": "Substitution-model selection method.",
+                    "fa_icon": "fas fa-search"
+                },
+                "substitution_model": {
+                    "type": "string",
+                    "description": "Fixed substitution model (used only when model_selection = fixed), e.g. 'GTR+F+I+G4'.",
+                    "fa_icon": "fas fa-atom"
+                },
+                "bootstrap": {
+                    "type": "integer",
+                    "default": 5000,
+                    "description": "UFBoot2 / bootstrap replicates for branch support.",
+                    "fa_icon": "fas fa-redo"
+                },
+                "outgroups": {
+                    "type": "string",
+                    "description": "Outgroup taxa for rooting (comma-separated or list).",
+                    "help_text": "e.g. 'Trirhithrum,Capparimyia'.",
+                    "fa_icon": "fas fa-anchor"
+                },
+                "run_epang": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Place query sequences into a reference tree with EPA-NG.",
+                    "fa_icon": "fas fa-map-pin"
+                }
+            }
+        },
+        "p1_5_delimitation": {
+            "title": "Part 1.5: Species delimitation",
+            "type": "object",
+            "description": "Delimit putative species from the inferred tree.",
+            "fa_icon": "fas fa-project-diagram",
+            "properties": {
+                "run_delimitation": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Run species delimitation.",
+                    "fa_icon": "fas fa-cut"
+                },
+                "delimitation_method": {
+                    "type": "string",
+                    "default": "mptp",
+                    "enum": ["mptp", "bptp", "asap"],
+                    "description": "Species delimitation method.",
+                    "fa_icon": "fas fa-project-diagram"
+                },
+                "mptp_mcmc": {
+                    "type": "integer",
+                    "default": 1000000,
+                    "description": "mPTP MCMC steps for support values.",
+                    "fa_icon": "fas fa-dice"
+                }
+            }
+        },
+        "p1_6_phylogeography": {
+            "title": "Part 1.6: Population structure & phylogeography",
+            "type": "object",
+            "description": "Haplotype networks, differentiation statistics, AMOVA, clustering, neutrality, and historical biogeography.",
+            "fa_icon": "fas fa-network-wired",
+            "properties": {
+                "run_phylogeography": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Run population-structure and phylogeographic analyses.",
+                    "fa_icon": "fas fa-network-wired"
+                },
+                "diff_stat": {
+                    "type": "string",
+                    "default": "fst",
+                    "enum": ["fst", "jost_d", "gst", "all"],
+                    "description": "Population-differentiation statistic(s) to compute.",
+                    "fa_icon": "fas fa-percentage"
+                },
+                "permutations": {
+                    "type": "integer",
+                    "default": 10000,
+                    "description": "Permutation replicates for differentiation significance.",
+                    "fa_icon": "fas fa-random"
+                },
+                "run_amova": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Run AMOVA variance partitioning.",
+                    "fa_icon": "fas fa-chart-pie"
+                },
+                "cluster_method": {
+                    "type": "string",
+                    "default": "none",
+                    "enum": ["none", "geneland", "tess3r", "samova"],
+                    "description": "Spatial genetic clustering method.",
+                    "fa_icon": "fas fa-object-group"
+                },
+                "run_basta": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Run BASTA structured-coalescent migration inference (BEAST2).",
+                    "fa_icon": "fas fa-route"
+                }
+            }
+        },
+        "p2_7_environmental": {
+            "title": "Part 2.1: Environmental data retrieval",
+            "type": "object",
+            "description": "Climate, vegetation, topography, hydrology and human-population layers.",
+            "fa_icon": "fas fa-cloud-sun-rain",
+            "properties": {
+                "run_environmental": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Retrieve environmental/anthropogenic covariate layers.",
+                    "fa_icon": "fas fa-cloud-sun-rain"
+                },
+                "env_layers": {
+                    "type": "string",
+                    "default": "bioclim,elevation,landcover",
+                    "description": "Comma-separated environmental layers to fetch.",
+                    "help_text": "Options include: bioclim, elevation, landcover, ndvi, terraclim, surfacewater, worldpop.",
+                    "fa_icon": "fas fa-layer-group"
+                },
+                "bioclim_source": {
+                    "type": "string",
+                    "default": "worldclim",
+                    "enum": ["worldclim", "chelsa"],
+                    "description": "Source for bioclimatic variables.",
+                    "fa_icon": "fas fa-temperature-high"
+                },
+                "env_resolution": {
+                    "type": "number",
+                    "default": 0.5,
+                    "description": "Raster resolution in arc-minutes for climate/terrain layers.",
+                    "fa_icon": "fas fa-expand"
+                },
+                "future_climate": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Also fetch CMIP6 future-climate projections.",
+                    "fa_icon": "fas fa-forward"
+                }
+            }
+        },
+        "p2_8_sdm": {
+            "title": "Part 2.2: Niche / distribution modelling",
+            "type": "object",
+            "description": "Ecological niche / species distribution modelling (ENM/SDM).",
+            "fa_icon": "fas fa-map-marked-alt",
+            "properties": {
+                "run_sdm": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Run ecological niche / species distribution modelling.",
+                    "fa_icon": "fas fa-map-marked-alt"
+                },
+                "sdm_algorithm": {
+                    "type": "string",
+                    "default": "maxent",
+                    "enum": ["maxent", "randomforest", "glm"],
+                    "description": "SDM algorithm.",
+                    "fa_icon": "fas fa-brain"
+                },
+                "predictor_reduction": {
+                    "type": "string",
+                    "default": "vif",
+                    "enum": ["none", "vif", "pca"],
+                    "description": "Method to reduce collinear predictors before modelling.",
+                    "fa_icon": "fas fa-compress-arrows-alt"
+                },
+                "background_points": {
+                    "type": "integer",
+                    "default": 10000,
+                    "description": "Number of background/pseudo-absence points.",
+                    "fa_icon": "fas fa-braille"
+                }
+            }
+        },
+        "p2_9_landscape_genetics": {
+            "title": "Part 2.3: Landscape genetics (IBD vs IBE)",
+            "type": "object",
+            "description": "Test whether genetic structure is explained by geography, environment, or both.",
+            "fa_icon": "fas fa-mountain",
+            "properties": {
+                "run_landscape_genetics": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Run IBD-vs-IBE landscape-genetics tests.",
+                    "fa_icon": "fas fa-mountain"
+                },
+                "lg_method": {
+                    "type": "string",
+                    "default": "mmrr",
+                    "enum": ["partial_mantel", "mmrr", "gdm", "rda", "all"],
+                    "description": "Landscape-genetics test to run.",
+                    "fa_icon": "fas fa-diagnoses"
+                },
+                "lg_permutations": {
+                    "type": "integer",
+                    "default": 10000,
+                    "description": "Permutations for Mantel/MMRR significance.",
+                    "fa_icon": "fas fa-random"
+                }
+            }
+        },
+        "resources": {
+            "title": "Max resources",
+            "type": "object",
+            "description": "Resource ceilings applied to each process.",
+            "fa_icon": "fas fa-server",
+            "properties": {
+                "max_cpus":   { "type": "integer", "default": 16, "fa_icon": "fas fa-microchip", "description": "Max CPUs per process." },
+                "max_memory": { "type": "string", "default": "128.GB", "pattern": "^\\d+(\\.\\d+)?\\.?\\s*(K|M|G|T)?B$", "description": "Max memory per process.", "fa_icon": "fas fa-memory" },
+                "max_time":   { "type": "string", "default": "240.h", "pattern": "^(\\d+\\.?\\s*(s|m|h|d|day)\\s*)+$", "description": "Max time per process.", "fa_icon": "fas fa-clock" }
+            }
+        },
+        "generic": {
+            "title": "Generic options",
+            "type": "object",
+            "description": "Less common options for the pipeline, typically set in a config file.",
+            "fa_icon": "fas fa-file-import",
+            "properties": {
+                "publish_dir_mode": {
+                    "type": "string",
+                    "default": "copy",
+                    "enum": ["symlink", "rellink", "link", "copy", "copyNoFollow", "move"],
+                    "description": "Method used to publish results.",
+                    "hidden": true,
+                    "fa_icon": "fas fa-copy"
+                },
+                "help":            { "type": "boolean", "description": "Display help text.", "fa_icon": "fas fa-question-circle", "hidden": true },
+                "version":         { "type": "boolean", "description": "Display version and exit.", "fa_icon": "fas fa-info", "hidden": true },
+                "skip_validation": { "type": "boolean", "description": "Skip parameter schema validation.", "fa_icon": "fas fa-forward", "hidden": true }
+            }
+        }
+    },
+    "allOf": [
+        { "$ref": "#/$defs/core_query" },
+        { "$ref": "#/$defs/p1_1_data_retrieval" },
+        { "$ref": "#/$defs/p1_2_curation" },
+        { "$ref": "#/$defs/p1_3_alignment" },
+        { "$ref": "#/$defs/p1_4_phylogenetics" },
+        { "$ref": "#/$defs/p1_5_delimitation" },
+        { "$ref": "#/$defs/p1_6_phylogeography" },
+        { "$ref": "#/$defs/p2_7_environmental" },
+        { "$ref": "#/$defs/p2_8_sdm" },
+        { "$ref": "#/$defs/p2_9_landscape_genetics" },
+        { "$ref": "#/$defs/resources" },
+        { "$ref": "#/$defs/generic" }
+    ]
+}

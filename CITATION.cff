@@ -1,0 +1,59 @@
+cff-version: 1.2.0
+message: "If you use phylogeoflow in your work, please cite it using the metadata below, and also cite the nf-core framework and Nextflow (see preferred-citation)."
+title: "phylogeoflow: a reusable Nextflow pipeline for phylogenetic and phylogeographic meta-analysis of arbitrary target taxa"
+type: software
+authors:
+  - family-names: Kibet-Rono
+    given-names: Gilbert
+    affiliation: "International Centre of Insect Physiology and Ecology (icipe); Jomo Kenyatta University of Agriculture and Technology (JKUAT)"
+    # orcid: "https://orcid.org/0000-0000-0000-0000"   # TODO: add your ORCID
+version: 0.1.0
+doi: 10.5281/zenodo.0000000                            # TODO: mint a Zenodo DOI on first release
+date-released: "2026-01-01"                            # TODO: set the release date
+license: MIT
+url: "https://github.com/kibet-gilbert/phylogeoflow"
+repository-code: "https://github.com/kibet-gilbert/phylogeoflow"
+keywords:
+  - phylogenetics
+  - phylogeography
+  - fruit flies
+  - Ceratitis
+  - Tephritidae
+  - DNA barcoding
+  - COI
+  - BOLD
+  - GBIF
+  - GenBank
+  - species distribution modelling
+  - Nextflow
+  - nf-core
+preferred-citation:
+  type: article
+  title: "The nf-core framework for community-curated bioinformatics pipelines."
+  authors:
+    - family-names: Ewels
+      given-names: Philip
+    - family-names: Peltzer
+      given-names: Alexander
+    - family-names: Fillinger
+      given-names: Sven
+    - family-names: Patel
+      given-names: Harshil
+    - family-names: Alneberg
+      given-names: Johannes
+    - family-names: Wilm
+      given-names: Andreas
+    - family-names: Garcia
+      given-names: Maxime Ulysse
+    - family-names: Di Tommaso
+      given-names: Paolo
+    - family-names: Nahnsen
+      given-names: Sven
+  doi: 10.1038/s41587-020-0439-x
+  journal: "Nature Biotechnology"
+  year: 2020
+  month: 2
+  volume: 38
+  issue: 3
+  start: 276
+  end: 278
