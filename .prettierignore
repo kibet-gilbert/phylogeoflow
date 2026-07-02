@@ -1,0 +1,19 @@
+# Prettier should not reformat these
+email_template.html
+adaptivecard.json
+slackreport.json
+.nextflow*
+work/
+data/
+results*/
+.DS_Store
+testing/
+testing*
+*.pyc
+bin/
+docs/images/
+*.png
+*.svg
+# Nextflow / Groovy files are handled by nf-core lint, not prettier
+*.nf
+*.config

@@ -1,0 +1,71 @@
+name: nf-core CI
+# Run the pipeline's stub test on pushes and PRs to confirm it still executes.
+
+on:
+  push:
+    branches:
+      - master
+      - main
+      - dev
+  pull_request:
+    branches:
+      - master
+      - main
+      - dev
+  release:
+    types: [published]
+
+# Cancel superseded runs on the same ref to save CI minutes.
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
+env:
+  NXF_ANSI_LOG: false
+  NXF_SINGULARITY_CACHEDIR: ${{ github.workspace }}/.singularity
+  NXF_SINGULARITY_LIBRARYDIR: ${{ github.workspace }}/.singularity
+
+jobs:
+  test:
+    name: Run stub | ${{ matrix.NXF_VER }}
+    # Only run on the main repo (not every fork) to avoid duplicate/needless runs.
+    if: "${{ github.repository == 'kibet-gilbert/phylogeoflow' }}"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        NXF_VER:
+          - "23.10.0"   # minimum supported (matches manifest.nextflowVersion)
+          - "latest-everything"
+    steps:
+      - name: Check out pipeline code
+        uses: actions/checkout@v4
+
+      - name: Install Nextflow
+        uses: nf-core/setup-nextflow@v2
+        with:
+          version: "${{ matrix.NXF_VER }}"
+
+      - name: Run pipeline with the stub profile (no network / no APIs)
+        run: |
+          nextflow run ${GITHUB_WORKSPACE} \
+            -profile test_stub,docker \
+            -stub \
+            --outdir ./results
+
+  # Optional: a tiny REAL run against GenBank only. Disabled by default because
+  # it hits a live API; enable by removing `if: false` once you're comfortable.
+  test_live:
+    name: Run minimal live test (GenBank only)
+    if: false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: nf-core/setup-nextflow@v2
+        with:
+          version: "23.10.0"
+      - name: Minimal live run
+        run: |
+          nextflow run ${GITHUB_WORKSPACE} \
+            -profile test,docker \
+            --outdir ./results_live
