@@ -58,13 +58,15 @@ It is organised in two parts as:
 - ✅ **GenBank** — via **either** [Entrez Direct](https://www.ncbi.nlm.nih.gov/books/NBK179288/) **or** [`rentrez`](https://cran.r-project.org/package=rentrez); two interchangeable engines (`--genbank_engine edirect|rentrez|both`) that can run side by side for validation via `bin/compare_engines.R`.
 - ✅ **GBIF** — via [`rgbif`](https://cran.r-project.org/package=rgbif) using the asynchronous `occ_download()` API, returning a **citable dataset DOI**.
 
-**2. Curation & harmonisation**
+**2. Taxonomic (re)Classification**   
+
+- ✅ **RDP** — [RDPClassifier](https://github.com/rdpstaff/classifier) with the [COI eukaryote training set](https://github.com/terrimporter/CO1Classifier) (Porter & Hajibabaei); retain assignments meeting a length (≥500 bp) and bootstrap threshold, as in the original meta-analysis.
+- ✅ **PROTAX-GPU/CPU** — [PROTAX-GPU](https://doi.org/10.1098/rstb.2023.0124) a GPU-accelerated JAX-based implementation of [PROTAX](https://doi.org/10.1093/bioinformatics/btw346) (Porter & Hajibabaei) - [PROTAX code](http://www.helsinki.fi/science/metapop/Software.htm).
 
 **3. Curation & harmonisation**
 
 - ✅ Per-database cleaners standardising to a shared schema: marker-name harmonisation, coordinate parsing, coordinate-quality filtering ([`CoordinateCleaner`](https://cran.r-project.org/package=CoordinateCleaner) for GBIF), deterministic deduplication.
 - 🚧 **`harmonize`** — cross-database merge and deduplication (matching BOLD `insdc_acs` ↔ GenBank accessions, preferring the richer BCDM record) to avoid double-counting specimens present in multiple databases.
-- 📋 **Taxonomic (re)classification** — [RDPClassifier](https://github.com/rdpstaff/classifier) with the [COI eukaryote training set](https://github.com/terrimporter/CO1Classifier) (Porter & Hajibabaei); retain assignments meeting a length (≥500 bp) and bootstrap threshold, as in the original meta-analysis.
 
 **4. Multiple sequence alignment & trimming**
 
@@ -119,6 +121,7 @@ It is organised in two parts as:
 | Phase | Component | Status |
 |---|---|---|
 | 1 | BOLD / GenBank / GBIF retrieval + cleaning | ✅ implemented |
+| 1 | RDP / PROTAX-GPU-CPU  Taxonomic Classification | ✅ implemented |
 | 1 | `--help`, schema, profiles, stub tests | ✅ implemented |
 | 1 | Cross-database `harmonize` | 🚧 scaffolded |
 | 1 | RDPClassifier taxonomy | 📋 planned |
