@@ -24,8 +24,9 @@ include { GBIF_RETRIEVAL    } from '../subworkflows/local/gbif_retrieval/main'
 // Stage-gating helpers
 include { resolveStep ; runStage } from '../subworkflows/local/utils_stages/main'
 
-// ---- Planned subworkflows (uncomment as each is built) ----
-// include { CURATION            } from '../subworkflows/local/curation/main'
+// ---- Downstream subworkflows ----
+include { CURATION            } from '../subworkflows/local/curation/main'
+include { CLASSIFY            } from '../subworkflows/local/classify/main'
 // include { ALIGNMENT           } from '../subworkflows/local/alignment/main'
 // include { PHYLOGENETICS       } from '../subworkflows/local/phylogenetics/main'
 // include { DELIMITATION        } from '../subworkflows/local/delimitation/main'
@@ -51,6 +52,7 @@ workflow PHYLOGEOFLOW {
     // channels carrying data between stages
     ch_seq_csv = Channel.empty()   // sequence clean CSVs (bold + genbank)
     ch_occ_csv = Channel.empty()   // occurrence clean CSVs (gbif)
+    ch_clean   = Channel.empty()   // unified tuple(meta, csv) for curation
     ch_fasta   = Channel.empty()
     ch_pooled  = Channel.empty()   // harmonized dataset (from stage 2)
     ch_aln     = Channel.empty()
@@ -67,18 +69,22 @@ workflow PHYLOGEOFLOW {
 
         if ('genbank' in dbs) {
             GENBANK_RETRIEVAL(meta_spec)
+            // GenBank emits tuple(meta, engine, csv) -> drop engine for curation
+            ch_clean    = ch_clean.mix( GENBANK_RETRIEVAL.out.csv.map { meta, engine, csv -> tuple(meta, csv) } )
             ch_seq_csv  = ch_seq_csv.mix(GENBANK_RETRIEVAL.out.csv)
             ch_fasta    = ch_fasta.mix(GENBANK_RETRIEVAL.out.fasta)
             ch_versions = ch_versions.mix(GENBANK_RETRIEVAL.out.versions)
         }
         if ('bold' in dbs) {
             BOLD_RETRIEVAL(meta_spec)
+            ch_clean    = ch_clean.mix(BOLD_RETRIEVAL.out.csv)
             ch_seq_csv  = ch_seq_csv.mix(BOLD_RETRIEVAL.out.csv)
             ch_fasta    = ch_fasta.mix(BOLD_RETRIEVAL.out.fasta)
             ch_versions = ch_versions.mix(BOLD_RETRIEVAL.out.versions)
         }
         if ('gbif' in dbs) {
             GBIF_RETRIEVAL(meta_spec)
+            ch_clean    = ch_clean.mix(GBIF_RETRIEVAL.out.csv)
             ch_occ_csv  = ch_occ_csv.mix(GBIF_RETRIEVAL.out.csv)
             ch_versions = ch_versions.mix(GBIF_RETRIEVAL.out.versions)
         }
@@ -88,49 +94,62 @@ workflow PHYLOGEOFLOW {
     //  STAGE 2 — Curation & harmonisation  (linear)
     // =====================================================================
     if ( runStage(2, target) ) {
-        // CURATION(ch_seq_csv.collect(), ch_occ_csv.collect())
-        // ch_pooled   = CURATION.out.pooled
-        // ch_versions = ch_versions.mix(CURATION.out.versions)
-        log.info "[phylogeoflow] stage 2 (curation) — wire CURATION subworkflow here"
+        CURATION(ch_clean)
+        ch_pooled   = CURATION.out.pooled
+        ch_fasta    = ch_fasta.mix(CURATION.out.fasta)
+        ch_versions = ch_versions.mix(CURATION.out.versions)
     }
 
     // =====================================================================
-    //  STAGE 3 — Alignment & trimming  (linear)
+    //  STAGE 3 — Classification (COI -> species)  (linear)
+    //  Classifies/reclassifies the harmonized sequences against a reference
+    //  model (RDP by default; PROTAX-GPU/CPU optionally). Runnable only when
+    //  --run_classification is set (default true).
     // =====================================================================
-    if ( runStage(3, target) ) {
+    ch_class = Channel.empty()
+    if ( runStage(3, target) && params.run_classification ) {
+        CLASSIFY(CURATION.out.fasta)
+        ch_class    = CLASSIFY.out.assignments
+        ch_versions = ch_versions.mix(CLASSIFY.out.versions)
+    }
+
+    // =====================================================================
+    //  STAGE 4 — Alignment & trimming  (linear)
+    // =====================================================================
+    if ( runStage(4, target) ) {
         // ALIGNMENT(ch_pooled)
         // ch_aln      = ALIGNMENT.out.trimmed
         // ch_versions = ch_versions.mix(ALIGNMENT.out.versions)
-        log.info "[phylogeoflow] stage 3 (alignment) — wire ALIGNMENT subworkflow here"
+        log.info "[phylogeoflow] stage 4 (alignment) — wire ALIGNMENT subworkflow here"
     }
 
     // =====================================================================
-    //  STAGE 4 — Phylogenetic inference  (linear)
+    //  STAGE 5 — Phylogenetic inference  (linear)
     // =====================================================================
-    if ( runStage(4, target) ) {
+    if ( runStage(5, target) ) {
         // PHYLOGENETICS(ch_aln)
         // ch_tree     = PHYLOGENETICS.out.tree
         // ch_versions = ch_versions.mix(PHYLOGENETICS.out.versions)
-        log.info "[phylogeoflow] stage 4 (phylogenetics) — wire PHYLOGENETICS subworkflow here"
+        log.info "[phylogeoflow] stage 5 (phylogenetics) — wire PHYLOGENETICS subworkflow here"
     }
 
     // =====================================================================
-    //  STAGE 5 — Species delimitation  (linear)
+    //  STAGE 6 — Species delimitation  (linear)
     // =====================================================================
-    if ( runStage(5, target) && params.run_delimitation ) {
+    if ( runStage(6, target) && params.run_delimitation ) {
         // DELIMITATION(ch_tree, ch_aln)
         // ch_versions = ch_versions.mix(DELIMITATION.out.versions)
-        log.info "[phylogeoflow] stage 5 (delimitation) — wire DELIMITATION subworkflow here"
+        log.info "[phylogeoflow] stage 6 (delimitation) — wire DELIMITATION subworkflow here"
     }
 
     // =====================================================================
-    //  STAGE 6 — Population structure & phylogeography  (linear)
+    //  STAGE 7 — Population structure & phylogeography  (linear)
     // =====================================================================
-    if ( runStage(6, target) && params.run_phylogeography ) {
+    if ( runStage(7, target) && params.run_phylogeography ) {
         // PHYLOGEOGRAPHY(ch_aln, ch_pooled)
         // ch_geo      = PHYLOGEOGRAPHY.out.stats
         // ch_versions = ch_versions.mix(PHYLOGEOGRAPHY.out.versions)
-        log.info "[phylogeoflow] stage 6 (phylogeography) — wire PHYLOGEOGRAPHY subworkflow here"
+        log.info "[phylogeoflow] stage 7 (phylogeography) — wire PHYLOGEOGRAPHY subworkflow here"
     }
 
     // =====================================================================

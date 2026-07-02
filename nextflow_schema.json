@@ -9,7 +9,9 @@
             "title": "Core query",
             "type": "object",
             "description": "Define the target taxon, its rank, and run identity. Applies to the whole pipeline.",
-            "required": ["target_taxon"],
+            "required": [
+                "target_taxon"
+            ],
             "fa_icon": "fas fa-bullseye",
             "properties": {
                 "target_taxon": {
@@ -21,7 +23,14 @@
                 "taxon_rank": {
                     "type": "string",
                     "default": "genus",
-                    "enum": ["species", "genus", "family", "order", "class", "phylum"],
+                    "enum": [
+                        "species",
+                        "genus",
+                        "family",
+                        "order",
+                        "class",
+                        "phylum"
+                    ],
                     "description": "Rank of the target taxon. Ranks above genus fan out over child taxa iteratively.",
                     "fa_icon": "fas fa-layer-group"
                 },
@@ -47,7 +56,7 @@
             }
         },
         "p1_1_data_retrieval": {
-            "title": "Part 1.1 — Data retrieval",
+            "title": "Part 1.1 \u2014 Data retrieval",
             "type": "object",
             "description": "Which sequence/occurrence databases to query and how (BOLD, GenBank, GBIF).",
             "fa_icon": "fas fa-database",
@@ -62,7 +71,11 @@
                 "genbank_engine": {
                     "type": "string",
                     "default": "edirect",
-                    "enum": ["edirect", "rentrez", "both"],
+                    "enum": [
+                        "edirect",
+                        "rentrez",
+                        "both"
+                    ],
                     "description": "GenBank retrieval engine. 'both' runs the two side by side for comparison.",
                     "fa_icon": "fas fa-code-branch"
                 },
@@ -122,7 +135,7 @@
             }
         },
         "p1_2_curation": {
-            "title": "Part 1.2 — Curation & harmonisation",
+            "title": "Part 1.2 \u2014 Curation & harmonisation",
             "type": "object",
             "description": "Cross-database merge/dedup, coordinate-quality filtering, and taxonomic (re)classification.",
             "fa_icon": "fas fa-broom",
@@ -135,34 +148,120 @@
                 "harmonize_prefer": {
                     "type": "string",
                     "default": "bold",
-                    "enum": ["bold", "genbank"],
+                    "enum": [
+                        "bold",
+                        "genbank"
+                    ],
                     "description": "When the same specimen appears in multiple databases, which source to keep.",
                     "fa_icon": "fas fa-code-merge"
-                },
+                }
+            }
+        },
+        "p1_3_classify": {
+            "title": "Part 1.3 \u2014 Classification (COI to species)",
+            "type": "object",
+            "description": "Taxonomically (re)classify COI sequences to species against a reference model.",
+            "fa_icon": "fas fa-sitemap",
+            "properties": {
                 "run_classification": {
                     "type": "boolean",
                     "default": true,
-                    "description": "Run RDPClassifier taxonomic (re)assignment.",
+                    "description": "Run taxonomic classification of COI sequences.",
                     "fa_icon": "fas fa-sitemap"
+                },
+                "classifier": {
+                    "type": "string",
+                    "default": "rdp",
+                    "enum": [
+                        "rdp",
+                        "protax",
+                        "protax_cpu"
+                    ],
+                    "description": "Classification engine. rdp = RDP+CO1Classifier (CPU, default); protax = PROTAX-GPU (needs CUDA GPU); protax_cpu = PROTAX-CPU (slow).",
+                    "fa_icon": "fas fa-robot"
                 },
                 "classifier_trainset": {
                     "type": "string",
-                    "default": "CO1v4.0",
-                    "description": "COI eukaryote training set version for RDPClassifier.",
+                    "default": "RDP-COI-v5.1.0",
+                    "description": "RDP CO1Classifier reference set version to download.",
                     "fa_icon": "fas fa-graduation-cap"
                 },
                 "classifier_min_bootstrap": {
                     "type": "number",
-                    "default": 1.0,
+                    "default": 0.8,
                     "minimum": 0,
                     "maximum": 1,
-                    "description": "Minimum classification bootstrap support to retain an assignment.",
+                    "description": "Minimum RDP bootstrap at the target rank to keep an assignment (species@500bp+ ~0.9 for 95% accuracy).",
                     "fa_icon": "fas fa-percent"
+                },
+                "classify_target_rank": {
+                    "type": "string",
+                    "default": "species",
+                    "enum": [
+                        "domain",
+                        "phylum",
+                        "class",
+                        "order",
+                        "family",
+                        "genus",
+                        "species"
+                    ],
+                    "description": "Rank at which to report/filter assignments.",
+                    "fa_icon": "fas fa-layer-group"
+                },
+                "reference_cache": {
+                    "type": "string",
+                    "format": "directory-path",
+                    "description": "Directory to cache downloaded reference models (reused across runs).",
+                    "fa_icon": "fas fa-database"
+                },
+                "rdp_ref_url": {
+                    "type": "string",
+                    "description": "Override URL for the RDP CO1Classifier release zip.",
+                    "fa_icon": "fas fa-link",
+                    "hidden": true
+                },
+                "rdp_ref_local": {
+                    "type": "string",
+                    "description": "Path to an already-unzipped RDP model directory (skips download).",
+                    "fa_icon": "fas fa-folder",
+                    "hidden": true
+                },
+                "protax_container": {
+                    "type": "string",
+                    "description": "GPU-enabled PROTAX container image (required for --classifier protax).",
+                    "fa_icon": "fas fa-box",
+                    "hidden": true
+                },
+                "protax_model_name": {
+                    "type": "string",
+                    "default": "protax-coi",
+                    "description": "Label for the PROTAX reference model.",
+                    "fa_icon": "fas fa-tag",
+                    "hidden": true
+                },
+                "protax_model_local": {
+                    "type": "string",
+                    "description": "Path to a pre-built PROTAX model directory.",
+                    "fa_icon": "fas fa-folder",
+                    "hidden": true
+                },
+                "protax_taxonomy": {
+                    "type": "string",
+                    "description": "Taxonomy TSV to convert into a PROTAX model.",
+                    "fa_icon": "fas fa-file",
+                    "hidden": true
+                },
+                "protax_refs": {
+                    "type": "string",
+                    "description": "Reference FASTA to convert into a PROTAX model.",
+                    "fa_icon": "fas fa-file",
+                    "hidden": true
                 }
             }
         },
         "p1_3_alignment": {
-            "title": "Part 1.3 — Alignment & trimming",
+            "title": "Part 1.4 \u2014 Alignment & trimming",
             "type": "object",
             "description": "Multiple sequence alignment, alignment-quality evaluation, and trimming.",
             "fa_icon": "fas fa-align-center",
@@ -170,7 +269,11 @@
                 "aligner": {
                     "type": "string",
                     "default": "mafft",
-                    "enum": ["mafft", "pasta", "tcoffee"],
+                    "enum": [
+                        "mafft",
+                        "pasta",
+                        "tcoffee"
+                    ],
                     "description": "Multiple sequence alignment engine.",
                     "fa_icon": "fas fa-align-left"
                 },
@@ -197,7 +300,7 @@
             }
         },
         "p1_4_phylogenetics": {
-            "title": "Part 1.4 — Phylogenetic inference",
+            "title": "Part 1.5 \u2014 Phylogenetic inference",
             "type": "object",
             "description": "Substitution-model selection, tree inference, support, and placement.",
             "fa_icon": "fas fa-tree",
@@ -205,14 +308,22 @@
                 "tree_method": {
                     "type": "string",
                     "default": "iqtree",
-                    "enum": ["iqtree", "raxml-ng", "fasttree"],
+                    "enum": [
+                        "iqtree",
+                        "raxml-ng",
+                        "fasttree"
+                    ],
                     "description": "Maximum-likelihood tree inference engine.",
                     "fa_icon": "fas fa-tree"
                 },
                 "model_selection": {
                     "type": "string",
                     "default": "modelfinder",
-                    "enum": ["modelfinder", "modeltest-ng", "fixed"],
+                    "enum": [
+                        "modelfinder",
+                        "modeltest-ng",
+                        "fixed"
+                    ],
                     "description": "Substitution-model selection method.",
                     "fa_icon": "fas fa-search"
                 },
@@ -242,7 +353,7 @@
             }
         },
         "p1_5_delimitation": {
-            "title": "Part 1.5 — Species delimitation",
+            "title": "Part 1.6 \u2014 Species delimitation",
             "type": "object",
             "description": "Delimit putative species from the inferred tree.",
             "fa_icon": "fas fa-project-diagram",
@@ -256,7 +367,11 @@
                 "delimitation_method": {
                     "type": "string",
                     "default": "mptp",
-                    "enum": ["mptp", "bptp", "asap"],
+                    "enum": [
+                        "mptp",
+                        "bptp",
+                        "asap"
+                    ],
                     "description": "Species delimitation method.",
                     "fa_icon": "fas fa-project-diagram"
                 },
@@ -269,7 +384,7 @@
             }
         },
         "p1_6_phylogeography": {
-            "title": "Part 1.6 — Population structure & phylogeography",
+            "title": "Part 1.7 \u2014 Population structure & phylogeography",
             "type": "object",
             "description": "Haplotype networks, differentiation statistics, AMOVA, clustering, neutrality, and historical biogeography.",
             "fa_icon": "fas fa-network-wired",
@@ -283,7 +398,12 @@
                 "diff_stat": {
                     "type": "string",
                     "default": "fst",
-                    "enum": ["fst", "jost_d", "gst", "all"],
+                    "enum": [
+                        "fst",
+                        "jost_d",
+                        "gst",
+                        "all"
+                    ],
                     "description": "Population-differentiation statistic(s) to compute.",
                     "fa_icon": "fas fa-percentage"
                 },
@@ -302,7 +422,12 @@
                 "cluster_method": {
                     "type": "string",
                     "default": "none",
-                    "enum": ["none", "geneland", "tess3r", "samova"],
+                    "enum": [
+                        "none",
+                        "geneland",
+                        "tess3r",
+                        "samova"
+                    ],
                     "description": "Spatial genetic clustering method.",
                     "fa_icon": "fas fa-object-group"
                 },
@@ -315,7 +440,7 @@
             }
         },
         "p2_7_environmental": {
-            "title": "Part 2.7 — Environmental data retrieval",
+            "title": "Part 2.8 \u2014 Environmental data retrieval",
             "type": "object",
             "description": "Climate, vegetation, topography, hydrology and human-population layers.",
             "fa_icon": "fas fa-cloud-sun-rain",
@@ -336,7 +461,10 @@
                 "bioclim_source": {
                     "type": "string",
                     "default": "worldclim",
-                    "enum": ["worldclim", "chelsa"],
+                    "enum": [
+                        "worldclim",
+                        "chelsa"
+                    ],
                     "description": "Source for bioclimatic variables.",
                     "fa_icon": "fas fa-temperature-high"
                 },
@@ -355,7 +483,7 @@
             }
         },
         "p2_8_sdm": {
-            "title": "Part 2.8 — Niche / distribution modelling",
+            "title": "Part 2.9 \u2014 Niche / distribution modelling",
             "type": "object",
             "description": "Ecological niche / species distribution modelling (ENM/SDM).",
             "fa_icon": "fas fa-map-marked-alt",
@@ -369,14 +497,22 @@
                 "sdm_algorithm": {
                     "type": "string",
                     "default": "maxent",
-                    "enum": ["maxent", "randomforest", "glm"],
+                    "enum": [
+                        "maxent",
+                        "randomforest",
+                        "glm"
+                    ],
                     "description": "SDM algorithm.",
                     "fa_icon": "fas fa-brain"
                 },
                 "predictor_reduction": {
                     "type": "string",
                     "default": "vif",
-                    "enum": ["none", "vif", "pca"],
+                    "enum": [
+                        "none",
+                        "vif",
+                        "pca"
+                    ],
                     "description": "Method to reduce collinear predictors before modelling.",
                     "fa_icon": "fas fa-compress-arrows-alt"
                 },
@@ -389,7 +525,7 @@
             }
         },
         "p2_9_landscape_genetics": {
-            "title": "Part 2.9 — Landscape genetics (IBD vs IBE)",
+            "title": "Part 2.10 \u2014 Landscape genetics (IBD vs IBE)",
             "type": "object",
             "description": "Test whether genetic structure is explained by geography, environment, or both.",
             "fa_icon": "fas fa-mountain",
@@ -403,7 +539,13 @@
                 "lg_method": {
                     "type": "string",
                     "default": "mmrr",
-                    "enum": ["partial_mantel", "mmrr", "gdm", "rda", "all"],
+                    "enum": [
+                        "partial_mantel",
+                        "mmrr",
+                        "gdm",
+                        "rda",
+                        "all"
+                    ],
                     "description": "Landscape-genetics test to run.",
                     "fa_icon": "fas fa-diagnoses"
                 },
@@ -421,9 +563,26 @@
             "description": "Resource ceilings applied to each process.",
             "fa_icon": "fas fa-server",
             "properties": {
-                "max_cpus":   { "type": "integer", "default": 16, "fa_icon": "fas fa-microchip", "description": "Max CPUs per process." },
-                "max_memory": { "type": "string", "default": "128.GB", "pattern": "^\\d+(\\.\\d+)?\\.?\\s*(K|M|G|T)?B$", "description": "Max memory per process.", "fa_icon": "fas fa-memory" },
-                "max_time":   { "type": "string", "default": "240.h", "pattern": "^(\\d+\\.?\\s*(s|m|h|d|day)\\s*)+$", "description": "Max time per process.", "fa_icon": "fas fa-clock" }
+                "max_cpus": {
+                    "type": "integer",
+                    "default": 16,
+                    "fa_icon": "fas fa-microchip",
+                    "description": "Max CPUs per process."
+                },
+                "max_memory": {
+                    "type": "string",
+                    "default": "128.GB",
+                    "pattern": "^\\d+(\\.\\d+)?\\.?\\s*(K|M|G|T)?B$",
+                    "description": "Max memory per process.",
+                    "fa_icon": "fas fa-memory"
+                },
+                "max_time": {
+                    "type": "string",
+                    "default": "240.h",
+                    "pattern": "^(\\d+\\.?\\s*(s|m|h|d|day)\\s*)+$",
+                    "description": "Max time per process.",
+                    "fa_icon": "fas fa-clock"
+                }
             }
         },
         "generic": {
@@ -435,29 +594,78 @@
                 "publish_dir_mode": {
                     "type": "string",
                     "default": "copy",
-                    "enum": ["symlink", "rellink", "link", "copy", "copyNoFollow", "move"],
+                    "enum": [
+                        "symlink",
+                        "rellink",
+                        "link",
+                        "copy",
+                        "copyNoFollow",
+                        "move"
+                    ],
                     "description": "Method used to publish results.",
                     "hidden": true,
                     "fa_icon": "fas fa-copy"
                 },
-                "help":            { "type": "boolean", "description": "Display help text.", "fa_icon": "fas fa-question-circle", "hidden": true },
-                "version":         { "type": "boolean", "description": "Display version and exit.", "fa_icon": "fas fa-info", "hidden": true },
-                "skip_validation": { "type": "boolean", "description": "Skip parameter schema validation.", "fa_icon": "fas fa-forward", "hidden": true }
+                "help": {
+                    "type": "boolean",
+                    "description": "Display help text.",
+                    "fa_icon": "fas fa-question-circle",
+                    "hidden": true
+                },
+                "version": {
+                    "type": "boolean",
+                    "description": "Display version and exit.",
+                    "fa_icon": "fas fa-info",
+                    "hidden": true
+                },
+                "skip_validation": {
+                    "type": "boolean",
+                    "description": "Skip parameter schema validation.",
+                    "fa_icon": "fas fa-forward",
+                    "hidden": true
+                }
             }
         }
     },
     "allOf": [
-        { "$ref": "#/$defs/core_query" },
-        { "$ref": "#/$defs/p1_1_data_retrieval" },
-        { "$ref": "#/$defs/p1_2_curation" },
-        { "$ref": "#/$defs/p1_3_alignment" },
-        { "$ref": "#/$defs/p1_4_phylogenetics" },
-        { "$ref": "#/$defs/p1_5_delimitation" },
-        { "$ref": "#/$defs/p1_6_phylogeography" },
-        { "$ref": "#/$defs/p2_7_environmental" },
-        { "$ref": "#/$defs/p2_8_sdm" },
-        { "$ref": "#/$defs/p2_9_landscape_genetics" },
-        { "$ref": "#/$defs/resources" },
-        { "$ref": "#/$defs/generic" }
+        {
+            "$ref": "#/$defs/core_query"
+        },
+        {
+            "$ref": "#/$defs/p1_1_data_retrieval"
+        },
+        {
+            "$ref": "#/$defs/p1_2_curation"
+        },
+        {
+            "$ref": "#/$defs/p1_3_classify"
+        },
+        {
+            "$ref": "#/$defs/p1_3_alignment"
+        },
+        {
+            "$ref": "#/$defs/p1_4_phylogenetics"
+        },
+        {
+            "$ref": "#/$defs/p1_5_delimitation"
+        },
+        {
+            "$ref": "#/$defs/p1_6_phylogeography"
+        },
+        {
+            "$ref": "#/$defs/p2_7_environmental"
+        },
+        {
+            "$ref": "#/$defs/p2_8_sdm"
+        },
+        {
+            "$ref": "#/$defs/p2_9_landscape_genetics"
+        },
+        {
+            "$ref": "#/$defs/resources"
+        },
+        {
+            "$ref": "#/$defs/generic"
+        }
     ]
 }
