@@ -1,0 +1,74 @@
+## .nf-core.yml
+## Configuration for nf-core tools (lint, sync, etc.).
+## phylogeoflow adopts nf-core STRUCTURE but is developed independently and is
+## not part of the nf-core organisation. The lint skips below disable checks
+## that only apply to official nf-core pipelines or to template files this
+## pipeline deliberately does not carry. Re-enable any of these as you adopt
+## the corresponding nf-core convention.
+
+repository_type: pipeline
+
+## Pin the tools version this config was written against (informational; update
+## when you bump nf-core tools). Remove if it causes a version-mismatch warning.
+nf_core_version: "3.1.0"
+
+lint:
+  ## --- Not an official nf-core pipeline: skip org-branding / infra checks ---
+  # manifest.name / homepage etc. intentionally use 'kibet-gilbert/phylogeoflow'
+  # rather than an 'nf-core/...' identifier.
+  nextflow_config:
+    - manifest.name
+    - manifest.homePage
+    - config_defaults
+  # We use a MIT LICENSE crediting the author, not the nf-core template wording.
+  files_unchanged:
+    - LICENSE
+    - .github/CONTRIBUTING.md
+    - .github/PULL_REQUEST_TEMPLATE.md
+    - .github/ISSUE_TEMPLATE/bug_report.yml
+    - .github/ISSUE_TEMPLATE/config.yml
+    - .github/ISSUE_TEMPLATE/feature_request.yml
+    - .github/workflows/branch.yml
+    - .github/workflows/linting.yml
+    - .github/workflows/linting_comment.yml
+    - .prettierrc.yml
+    - assets/email_template.html
+    - assets/email_template.txt
+    - assets/sendmail_template.txt
+    - docs/README.md
+
+  ## --- Template files this pipeline does not (yet) ship ---
+  files_exist:
+    - CODE_OF_CONDUCT.md
+    - assets/nf-core-phylogeoflow_logo_light.png
+    - docs/images/nf-core-phylogeoflow_logo_light.png
+    - docs/images/nf-core-phylogeoflow_logo_dark.png
+    - .github/ISSUE_TEMPLATE/bug_report.yml
+    - .github/ISSUE_TEMPLATE/config.yml
+    - .github/ISSUE_TEMPLATE/feature_request.yml
+    - .github/PULL_REQUEST_TEMPLATE.md
+    - .github/CONTRIBUTING.md
+    - .github/.dockstore.yml
+    - .github/workflows/branch.yml
+    - .github/workflows/linting_comment.yml
+    - assets/email_template.html
+    - assets/email_template.txt
+    - assets/sendmail_template.txt
+    - assets/multiqc_config.yml
+    - conf/igenomes.config
+    - conf/igenomes_ignored.config
+
+  ## --- Checks that don't fit this pipeline's design ---
+  # No reference-genome (iGenomes) concept in a taxon-driven meta-analysis.
+  actions_awsfulltest: false
+  actions_awstest: false
+  # We don't use the nf-core email / MultiQC report stack (yet).
+  # TODO comments are used deliberately as roadmap markers in scaffolded stages.
+  pipeline_todos: false
+  # Our subworkflow/param names are pipeline-specific, not template-derived.
+  nextflow_config_container: false
+
+  ## --- Multiqc / schema bits to revisit as the pipeline matures ---
+  # readme badges point at this repo's own Actions, not nf-core infra.
+  readme:
+    - nextflow_badge

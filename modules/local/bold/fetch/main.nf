@@ -1,7 +1,7 @@
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     modules/local/bold/fetch/main.nf
-    BOLD retrieval via BOLDconnectR (v1.0.0, BCDM format).
+    BOLD retrieval via BOLDconnectR (v1.0.1, BCDM format).
 
     Discovers processids (bold.public.search) then fetches in batches
     (bold.fetch) to scale past the per-call ceiling. Requires a BOLD API key
@@ -64,7 +64,7 @@ process FETCH_BOLD {
     Rscript -e 'saveRDS(read.delim("out/bold_raw.tsv"), "out/bold_raw.rds")' 2>/dev/null || touch out/bold_raw.rds
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
-        r-boldconnectr: 1.0.0
+        r-boldconnectr: 1.0.1
     END_VERSIONS
     """
 }
