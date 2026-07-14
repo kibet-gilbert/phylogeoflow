@@ -54,8 +54,48 @@ message("[fetch_bold] geography: ", if (is.null(geo)) "all" else paste(geo, coll
 markers <- if (nchar(opt$markers))   str_split(opt$markers,   ",")[[1]] |> str_squish() else NULL
 
 # ---- 1. DISCOVER: candidate processids for taxon (+ geography where supported) ----
+# bold.public.search has a hard, non-recoverable ~1M-record ceiling: it errors
+# out ("Search has more than 1M records") rather than throttling or paginating.
+# There is no way to page around this at the API level, so for big taxa the
+# *search* itself must be partitioned. geography is the natural partition key:
+# pass one location at a time so each individual search call stays under the
+# ceiling, then merge + dedupe the resulting processids before bold.fetch.
+search_one <- function(location = NULL) {
+  args <- list(taxonomy = list(opt$taxon))
+  if (!is.null(location)) args$geography <- list(location)
+  tryCatch(
+    do.call(bold.public.search, args),
+    error = function(e) {
+      if (grepl("more than 1M", conditionMessage(e), fixed = TRUE)) {
+        scope <- if (is.null(location)) "worldwide" else location
+        message(sprintf(
+          "  [fetch_bold.R] search still exceeds 1M records for %s (%s) — skipping; ",
+          opt$taxon, scope),
+          "subdivide further (e.g. by country, or by a lower taxonomic rank ",
+          "such as family/genus) and re-run for that subset.")
+        NULL
+      } else {
+        stop(e)
+      }
+    }
+  )
+}
+
 message("[fetch_bold.R] searching BOLD for: ", opt$taxon)
-hits <- bold.public.search(taxonomy = list(opt$taxon))
+if (!is.null(geo)) {
+  message("[fetch_bold.R] partitioning search across ", length(geo), " geography term(s)")
+  hits_list <- lapply(geo, function(location) {
+    message("  searching: ", location)
+    search_one(location)
+  })
+  hits <- bind_rows(Filter(Negate(is.null), hits_list))
+} else {
+  hits <- search_one()
+  if (is.null(hits)) {
+    stop("Search exceeded the 1M-record ceiling. Re-run with --geography ",
+         "\"Location1,Location2,...\" (or a narrower taxon) to partition the search.")
+  }
+}
 if (is.null(hits) || nrow(hits) == 0) { message("no records"); quit(status = 0) }
 ids <- unique(hits$processid)
 message("[fetch_bold.R] candidate processids: ", length(ids))
