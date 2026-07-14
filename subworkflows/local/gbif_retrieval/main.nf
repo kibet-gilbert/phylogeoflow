@@ -1,12 +1,8 @@
-/*
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    subworkflows/local/gbif_retrieval/main.nf
-    GBIF retrieval + clean subworkflow.
-
-    Take:  meta_spec = tuple(meta, spec)
-    Emit:  csv, summary, doi, versions
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-*/
+// subworkflows/local/gbif_retrieval/main.nf
+//
+// GBIF retrieval + cleaning.
+// FETCH_GBIF now takes a second input: the ISO-3166-1 country lookup file,
+// used to derive ISO2 codes from --geography when --country_codes is not given.
 
 include { FETCH_GBIF } from '../../../modules/local/gbif/fetch/main'
 include { CLEAN_GBIF } from '../../../modules/local/gbif/clean/main'
@@ -18,8 +14,12 @@ workflow GBIF_RETRIEVAL {
 
     main:
     ch_versions = Channel.empty()
-    ch_lookup = params.country_lookup ? Channel.fromPath(params.country_lookup, checkIfExists: true).collect()
-                                      : Channel.value([])
+
+    // Stage the country lookup table (empty list if not configured, which makes
+    // the `path` input optional from the module's point of view).
+    ch_lookup = params.country_lookup
+        ? Channel.fromPath(params.country_lookup, checkIfExists: true).collect()
+        : Channel.value([])
 
     FETCH_GBIF(meta_spec, ch_lookup)
     ch_versions = ch_versions.mix(FETCH_GBIF.out.versions)
