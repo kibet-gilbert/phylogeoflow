@@ -46,18 +46,43 @@ The subworkflow (`BOLD_RETRIEVAL`) runs `FETCH_BOLD` then `CLEAN_BOLD`, emitting
 3. BOLDconnectR has no standard biocontainer, so the BOLD processes need a small custom image (e.g. an `r-tidyverse` base plus `devtools::install_github("boldsystems-central/BOLDconnectR")` and Biostrings).
 
 > [!IMPORTANT]
-> BOLDSytems has a hard limit of 1million dataset per search. 
+> `bold.public.search` has a hard, non-recoverable ceiling of roughly 1 million records.
+> BOLDSytems has a hard limit of 1 million dataset per search. 
 > This means if you execute a search for an Order like `Diptera` it will hit the limit and throw an error.
-> To work around this error we execute an automated split search algorithm as follows:
+> To work around this error `fetch_bold.R` handles it with a recursive fallback ladder:
+
+1. **Unsplit** — try the whole taxon in one call.
+2. **Split by geography** — if it overflows and multiple `--geography` terms were
+   given, retry each country separately.
+3. **Split by taxonomic rank** — if still overflowing, resolve the taxon's children
+   at `--split-rank` (default `family`) via the GBIF backbone and query each child
+   separately.
+4. **Recurse** — repeat down the rank ladder (order → family → genus → species) up
+   to `--max-depth` levels.
+
+Controls:
+| Flag | Pipeline param | Default | Meaning |
+|---|---|---|---|
+| `--taxon-rank` | `--taxon_rank` | — | Rank of the target taxon; disambiguates GBIF homonyms |
+| `--split-rank` | `--bold_split_rank` | `family` | Rank to split at on overflow |
+| `--max-depth` | `--bold_max_depth` | `3` | How many ranks the recursion may descend |
+
+**Why `--taxon-rank` matters:** GBIF's backbone contains homonyms across kingdoms
+(e.g. *Diptera* is both an insect order and an unrelated plant name). Without a rank
+hint, `name_backbone()` may resolve to the wrong taxon and return nonsense children.
+Always pass the rank for high-level runs.
+
+**Why only core Linnaean ranks:** the rank ladder is `order → family → genus →
+species`. Informal ranks (suborder, superfamily, subfamily, tribe) are skipped
+because GBIF's backbone does not reliably hold them and would silently return zero
+children.
+
+**Requires `rgbif`** in the BOLD container, since child resolution goes through GBIF.
 
 The custom search function `discover_ids()` is a single recursive function that follows exactly the sequence below, per `(taxon, location-scope)` pair:
 
-1. **Unsplit** — one `bold.public.search()` call, passing *all* `--geography` terms at once (via `geography = as.list(locations)`) if `geo` was given, or none at all.
-2. **If 1. fails, split into individual locations** if there's more than one geography term —  and recurse per location (each retrying step 1 first, scoped to that one location).
-3. **If a single location (or no location) still overflows** — split the taxon at `--split-rank` (default `"family"`) via GBIF, and recurse the *whole ladder* per child at the same location scope. So a child family that itself overflows for a given country will retry unsplit → geo-split → further rank-split, same as the top-level taxon would.
-4. Rank-splitting keeps recursing down `rank_ladder` up to `--max-depth` — geography splitting doesn't consume that budget, since it's a one-shot fan-out rather than a recursive escalation.
-
-One subtlety worth flagging: because geography-splitting recursion always retries step 1 at each new scope, a case like "Diptera in 5 countries, only 1 of which individually overflows" now correctly does 1 combined call → 5 per-country calls → rank-split only for the 1 overflowing country — rather than rank-splitting everything, which is what your stated order implies and what the earlier version didn't quite get right.
+> [!NOTE]
+> One subtlety worth flagging: because geography-splitting recursion always retries step 1 at each new scope, a case like "Diptera in 5 countries, only 1 of which individually overflows" now correctly does 1 combined call → 5 per-country calls → rank-split only for the 1 overflowing country — rather than rank-splitting everything, which is what your stated order implies and what the earlier version didn't quite get right.
 
 ## Recommended validation
 

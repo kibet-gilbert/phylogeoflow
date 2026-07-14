@@ -1,0 +1,7 @@
+# conf/taxa/diptera_vectors.yml
+target_taxon:    "Diptera"
+taxon_rank:      "order"        # ESSENTIAL: disambiguates the GBIF homonym
+geography:       "assets/countries"
+bold_split_rank: "family"
+bold_max_depth:  3
+markers:         ["COI-5P"]

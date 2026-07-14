@@ -54,7 +54,7 @@ It is organised in two parts as:
 
 **1. Data retrieval** (selectable via `--databases`)
 
-- ✅ **BOLD** — via [`BOLDconnectR`](https://github.com/boldsystems-central/BOLDconnectR) (BCDM format); ID discovery then batched fetch to scale past per-call limits.
+- ✅ **BOLD** — via [`BOLDconnectR`](https://github.com/boldsystems-central/BOLDconnectR) (BCDM format); ID discovery then batched fetch. Queries that overflow BOLD's hard ~1M search ceiling are automatically split — first by geography, then recursively by taxonomic rank via the GBIF backbone (`--bold_split_rank`, `--bold_max_depth`) — making order- and class-level runs viable.
 - ✅ **GenBank** — via **either** [Entrez Direct](https://www.ncbi.nlm.nih.gov/books/NBK179288/) **or** [`rentrez`](https://cran.r-project.org/package=rentrez); two interchangeable engines (`--genbank_engine edirect|rentrez|both`) that can run side by side for validation via `bin/compare_engines.R`.
 - ✅ **GBIF** — via [`rgbif`](https://cran.r-project.org/package=rgbif) using the asynchronous `occ_download()` API, returning a **citable dataset DOI**.
 

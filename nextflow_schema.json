@@ -23,15 +23,8 @@
                 "taxon_rank": {
                     "type": "string",
                     "default": "genus",
-                    "enum": [
-                        "species",
-                        "genus",
-                        "family",
-                        "order",
-                        "class",
-                        "phylum"
-                    ],
-                    "description": "Rank of the target taxon. Ranks above genus fan out over child taxa iteratively.",
+                    "enum": ["species", "genus", "family", "order", "class", "phylum"],
+		    "description": "Rank of the target taxon. Used to fan out high-rank runs, and to disambiguate GBIF homonym lookups during BOLD overflow-splitting.",
                     "fa_icon": "fas fa-layer-group"
                 },
                 "step": {
@@ -133,6 +126,29 @@
                     "default": 5000,
                     "description": "processids per BOLD bold.fetch batch.",
                     "fa_icon": "fas fa-boxes"
+                },
+		"bold_split_rank": {
+		    "type": "string",
+		    "default": "family",
+		    "enum": ["order", "family", "genus", "species"],
+		    "description": "Taxonomic rank at which to split a BOLD query that overflows the ~1M search ceiling.",
+		    "help_text": "BOLD's bold.public.search errors (rather than paginating) above ~1M records. On overflow the pipeline splits the query: first across --geography terms, then into child taxa at this rank (resolved via the GBIF backbone). Only core Linnaean ranks are supported, since GBIF's backbone does not reliably return children for informal ranks (suborder, superfamily, tribe...).",
+		    "fa_icon": "fas fa-code-branch"
+		},
+		"bold_max_depth": {
+		    "type": "integer",
+		    "default": 3,
+		    "minimum": 1,
+		    "maximum": 4,
+		    "description": "Maximum number of taxonomic ranks the BOLD overflow-splitting recursion may descend.",
+		    "help_text": "Each level of recursion issues more GBIF and BOLD queries, so raise this only when a high-rank taxon (order/class) genuinely needs deep splitting.",
+		    "fa_icon": "fas fa-layer-group"
+		},
+		"bold_container": {
+		    "type": "string",
+		    "description": "Custom container image for the BOLD processes (must contain BOLDconnectR AND rgbif).",
+		    "fa_icon": "fas fa-box",
+		    "hidden": true
                 },
                 "entrez_key": {
                     "type": "string",
