@@ -23,6 +23,8 @@
 suppressMessages({
   library(optparse); library(rgbif); library(dplyr); library(readr); library(stringr)
 })
+.script_dir <- dirname(sub("--file=", "", grep("--file=", commandArgs(), value = TRUE)))
+source(file.path(.script_dir, "geo_utils.R"))
 
 `%||%` <- function(a, b) if (is.null(a) || length(a) == 0 || (length(a)==1 && is.na(a))) b else a
 
@@ -32,7 +34,12 @@ opt <- parse_args(OptionParser(option_list = list(
   make_option("--min-year",  type = "double", default = 0, dest = "min_year"),
   make_option("--outdir",    type = "character", default = "./out"),
   make_option("--max-coord-err", type = "double", default = Inf, dest = "max_coord_err")
+  make_option("--country-lookup", type = "character",
+	      default = Sys.getenv("PHYLOGEOFLOW_COUNTRY_LOOKUP", ""),
+	      dest = "country_lookup"),
+  make_option("--geography", type = "character", default = "")
 )))
+
 stopifnot(!is.null(opt$taxon))
 dir.create(opt$outdir, showWarnings = FALSE, recursive = TRUE)
 
@@ -49,10 +56,19 @@ preds <- list(
   pred("hasGeospatialIssue", FALSE),
   pred("occurrenceStatus", "PRESENT")
 )
-if (nchar(opt$countries)) {
-  iso <- str_split(opt$countries, ",")[[1]] |> str_squish()
-  preds <- c(preds, list(pred_in("country", iso)))
+
+iso <- parse_geo_arg(opt$countries)
+if (length(iso) == 0 && nzchar(opt$geography)) {
+  # derive ISO2 from country names via the lookup table
+  names_vec <- parse_geo_arg(opt$geography)
+  if (!nzchar(opt$country_lookup))
+    stop("--geography given without --country-lookup; cannot resolve ISO2 codes.")
+  iso <- countries_to_iso2(names_vec, opt$country_lookup)
+  message("[fetch_gbif] derived ", length(iso), " ISO2 codes from ",
+          length(names_vec), " country names")
 }
+if (length(iso)) preds <- c(preds, list(pred_in("country", iso)))
+
 if (opt$min_year > 0) {
   preds <- c(preds, list(pred_gte("year", as.integer(opt$min_year))))
 }

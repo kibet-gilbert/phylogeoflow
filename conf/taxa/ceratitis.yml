@@ -1,7 +1,7 @@
 # conf/taxa/ceratitis.yml
 target_taxon: "Ceratitis"
 taxon_rank:   "genus"
-geography:    ["Kenya","Uganda","Tanzania","Rwanda","Burundi","Ethiopia","South Sudan"]
+geography:    "assets/countries"
 markers:      ["COI-5P","16S","ND6","trnP","period","ITS1"]
 outgroups:    ["Trirhithrum","Capparimyia"]
 min_seq_len:  500

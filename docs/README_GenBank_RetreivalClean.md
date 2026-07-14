@@ -59,5 +59,6 @@ fetch_genbank.R  --taxon Ceratitis --markers COI --geography Kenya --batch 50 --
 # clean each, then:
 compare_engines.R --edirect out_edirect/genbank_clean.csv --rentrez out_rentrez/genbank_clean.csv
 ```
+> `--geography` accepts a comma-separated list **or a file** (one country per line).
 
 If the engines agree on the shared accessions, the harmonization is sound and you can scale up. Disagreements are almost always a gene-name synonym the `gene_map` doesn't yet cover — extend it as you encounter edge cases.

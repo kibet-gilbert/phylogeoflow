@@ -86,18 +86,25 @@
                     "help_text": "e.g. 'COI-5P,16S,ND6'. BCDM marker codes for BOLD; [Gene] terms for GenBank.",
                     "fa_icon": "fas fa-dna"
                 },
-                "geography": {
+		"geography": {
+		    "type": "string",
+		    "description": "Country names for BOLD/GenBank filtering. Comma-separated string, OR a path to a file with one country per line.",
+		    "help_text": "e.g. 'Kenya,Uganda,Tanzania' or 'assets/countries'. When --country_codes is not given, ISO2 codes for GBIF are derived automatically from these names using --country_lookup.",
+		    "fa_icon": "fas fa-globe-africa"
+		},
+		"country_codes": {
                     "type": "string",
-                    "description": "Country names for BOLD/GenBank filtering (comma-separated or list).",
-                    "help_text": "e.g. 'Kenya,Uganda,Tanzania'.",
-                    "fa_icon": "fas fa-globe-africa"
-                },
-                "country_codes": {
+		    "description": "ISO2 country codes for GBIF filtering. Comma-separated, OR a file path. If omitted, derived automatically from --geography.",
+		    "help_text": "e.g. 'KE,UG,TZ'. Leave unset to let the pipeline resolve codes from --geography via the ISO-3166-1 lookup table.",
+		    "fa_icon": "fas fa-flag"
+		},
+		"country_lookup": {
                     "type": "string",
-                    "description": "ISO2 country codes for GBIF filtering (comma-separated or list).",
-                    "help_text": "e.g. 'KE,UG,TZ,RW,BI,ET,SS'.",
-                    "fa_icon": "fas fa-flag"
-                },
+		    "format": "file-path",
+		    "default": "${projectDir}/assets/country_codes-ISO-3166-1",
+		    "description": "ISO-3166-1 lookup TSV used to resolve country names to ISO2 codes (columns: 'BOLDSystems name', 'Alpha-2 code').",
+		    "fa_icon": "fas fa-table"
+		},
                 "min_seq_len": {
                     "type": "integer",
                     "default": 500,

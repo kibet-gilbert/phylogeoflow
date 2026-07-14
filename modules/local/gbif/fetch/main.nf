@@ -30,6 +30,8 @@ process FETCH_GBIF {
 
     input:
     tuple val(meta), val(spec)
+    path(country_lookup)
+    path(geo_file), stageAs: 'geography.txt'
 
     output:
     tuple val(meta), path("out/gbif_raw.rds") , emit: raw
@@ -40,13 +42,15 @@ process FETCH_GBIF {
     def args      = task.ext.args ?: ''
     def taxon     = spec.taxon        ?: params.target_taxon
     def countries = (spec.country_codes ?: params.country_codes) ? "--countries '${(spec.country_codes ?: params.country_codes).join(',')}'" : ''
+    def geography = (spec.geography ?: params.geography) ? "--geography '${...}'" : ''
+    def lookup    = country_lookup ? "--country-lookup ${country_lookup}" : ''
     def minyear   = (spec.min_year    ?: params.min_year) ? "--min-year ${spec.min_year ?: params.min_year}" : ''
     def coorderr  = params.max_coord_err ? "--max-coord-err ${params.max_coord_err}" : ''
     """
     export GBIF_USER=\$GBIF_USER GBIF_PWD=\$GBIF_PWD GBIF_EMAIL=\$GBIF_EMAIL
     fetch_gbif.R \\
         --taxon '${taxon}' \\
-        ${countries} ${minyear} ${coorderr} ${args} \\
+        ${countries} ${geography} ${lookup} ${minyear} ${coorderr} ${args} \\
         --outdir out
 
     cat <<-END_VERSIONS > versions.yml

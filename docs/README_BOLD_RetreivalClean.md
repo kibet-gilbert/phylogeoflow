@@ -53,5 +53,6 @@ Run on a tiny known set and inspect the cleaned output before scaling:
 fetch_bold.R --taxon Ceratitis --markers COI-5P --geography Kenya --batch 500 --api-key "$BOLD_API_KEY" --outdir out_bold
 clean_bcdm.R --indir out_bold --outdir out_bold --markers COI-5P --min-len 500
 ```
+> `--geography` accepts a comma-separated list **or a file** (one country per line).
 
 Check that `coord` split correctly into lat/lon, that `genbank_acc` is populated where BOLD holds an INSDC accession, and that the summary counts look plausible.

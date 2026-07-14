@@ -155,7 +155,7 @@ nextflow secrets set GBIF_EMAIL    "<your-gbif-email>"
 Exercise the whole DAG with process stubs — no network/API access:
 
 ```bash
-nextflow run . -profile test_stub,docker -stub
+nextflow run . -profile test_stub,apptainer -stub
 ```
 
 ### 3. Minimal real run
@@ -165,7 +165,7 @@ Can be executed as one cumulative step or in individual stages using `--step` pa
 **`--step 6`** (the default) runs the whole Part-1 chain.   
 ```bash
 nextflow run kibet-gilbert/phylogeoflow \
-   -profile docker \
+   -profile apptainer \
    --target_taxon Ceratitis \
    --step 6 \
    --taxon_rank genus \
@@ -184,7 +184,7 @@ Retrieve, then inspect results/retrieval/ to confirm downloads:
 nextflow run kibet-gilbert/phylogeoflow \
    --target_taxon Ceratitis \
    --step 1 \
-   -profile docker \
+   -profile apptainer \
    --outdir results
 ```
 Looks good? Continue to step 2 — retrieval is cached, only curation runs
@@ -194,7 +194,7 @@ nextflow run kibet-gilbert/phylogeoflow \
    --target_taxon Ceratitis \
    --step 2 \
    -resume \ # makes it resume from step 1
-   -profile docker \
+   -profile apptainer \
    --outdir results
 ```
 All checks out? Continue to step 3, and so on
@@ -204,7 +204,7 @@ nextflow run kibet-gilbert/phylogeoflow \
    --target_taxon Ceratitis \
    --step 3 \
    -resume \
-   -profile docker \
+   -profile apptainer \
    --outdir results
  ```
 
@@ -213,7 +213,7 @@ Environmental modelling segment can run independently by their own using `--run_
 This runs retrieval + environmental, skipping stages 2-6 entirely because it needs only occurrence data.   
 ```bash
 nextflow run kibet-gilbert/phylogeoflow \
-   -profile docker \
+   -profile apptainer \
    --target_taxon Ceratitis \
    --step 1 \
    --run_environmental \
@@ -228,7 +228,7 @@ This lets you run branches in any valid combination without forcing the full cha
 
 ```bash
 nextflow run kibet-gilbert/phylogeoflow \
-   -profile docker \
+   -profile apptainer \
    -params-file conf/taxa/ceratitis.yml \
    --outdir results
 ```

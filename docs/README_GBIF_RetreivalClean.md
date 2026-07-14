@@ -56,6 +56,9 @@ The subworkflow (`GBIF_RETRIEVAL`) runs `FETCH_GBIF` then `CLEAN_GBIF`, emitting
 fetch_gbif.R --taxon Ceratitis --countries KE --min-year 2000 --outdir out_gbif
 clean_gbif.R --indir out_gbif --outdir out_gbif --min-year 2000
 ```
+> `--geography` accepts a comma-separated list **or a file** (one country per line).
+> For GBIF, `--country_codes` is derived from `--geography` automatically via
+> `assets/country_codes-ISO-3166-1` unless codes are given explicitly.
 
 Confirm the DOI was written to `out_gbif/gbif_doi.txt`, and check the summary CSV for how many records passed vs were flagged by `CoordinateCleaner`.
 

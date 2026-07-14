@@ -28,6 +28,7 @@ process FETCH_BOLD {
 
     input:
     tuple val(meta), val(spec)
+    path(geo_file), stageAs: 'geography.txt'
 
     output:
     tuple val(meta), path("out/bold_raw.rds") , emit: raw

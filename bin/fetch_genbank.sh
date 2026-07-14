@@ -68,14 +68,13 @@ if [[ -n "$MARKERS" ]]; then
   QUERY+=" AND (${GENE_OR})"
 fi
 
-if [[ -n "$GEOGRAPHY" ]]; then
-  GEO_OR=""
-  IFS=',' read -ra CS <<< "$GEOGRAPHY"
-  for c in "${CS[@]}"; do
-    c_trimmed="$(echo "$c" | sed 's/^ *//; s/ *$//')"
-    GEO_OR+="${GEO_OR:+ OR }${c_trimmed}[Country]"
-  done
-  QUERY+=" AND (${GEO_OR})"
+# --geography may be a FILE (one country per line) or a comma-separated string
+if [[ -n "$GEOGRAPHY" && -f "$GEOGRAPHY" ]]; then
+    GEOGRAPHY="$(grep -v '^[[:space:]]*#' "$GEOGRAPHY" \
+                 | grep -v '^[[:space:]]*$' \
+                 | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' \
+                 | paste -sd, -)"
+    echo "[fetch_genbank.sh] loaded $(echo "$GEOGRAPHY" | tr ',' '\n' | wc -l) countries from file" >&2
 fi
 
 # length filter via the [SLEN] field when bounds are given

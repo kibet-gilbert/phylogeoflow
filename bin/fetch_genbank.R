@@ -22,6 +22,8 @@ suppressMessages({
   library(optparse); library(rentrez); library(xml2)
   library(dplyr); library(readr); library(stringr); library(purrr)
 })
+.script_dir <- dirname(sub("--file=", "", grep("--file=", commandArgs(), value = TRUE)))
+source(file.path(.script_dir, "geo_utils.R"))
 
 opt <- parse_args(OptionParser(option_list = list(
   make_option("--taxon",     type = "character"),
@@ -46,11 +48,13 @@ if (nchar(opt$markers)) {
   query <- paste0(query, " AND (",
                   paste(sprintf("%s[Gene]", genes), collapse = " OR "), ")")
 }
-if (nchar(opt$geography)) {
-  cty <- str_split(opt$geography, ",")[[1]] |> str_squish()
+
+cty <- parse_geo_arg(opt$geography)
+if (length(cty)) {
   query <- paste0(query, " AND (",
                   paste(sprintf("%s[Country]", cty), collapse = " OR "), ")")
 }
+
 if (opt$min_len > 0 || opt$max_len > 0) {
   lo <- ifelse(opt$min_len > 0, opt$min_len, 1)
   hi <- ifelse(opt$max_len > 0, opt$max_len, 1e8)

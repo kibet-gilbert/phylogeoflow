@@ -18,8 +18,10 @@ workflow GBIF_RETRIEVAL {
 
     main:
     ch_versions = Channel.empty()
+    ch_lookup = params.country_lookup ? Channel.fromPath(params.country_lookup, checkIfExists: true).collect()
+                                      : Channel.value([])
 
-    FETCH_GBIF(meta_spec)
+    FETCH_GBIF(meta_spec, ch_lookup)
     ch_versions = ch_versions.mix(FETCH_GBIF.out.versions)
 
     CLEAN_GBIF(FETCH_GBIF.out.raw)

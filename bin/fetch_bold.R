@@ -27,6 +27,8 @@
 suppressMessages({
   library(optparse); library(BOLDconnectR); library(dplyr); library(readr); library(stringr)
 })
+.script_dir <- dirname(sub("--file=", "", grep("--file=", commandArgs(), value = TRUE)))
+source(file.path(.script_dir, "geo_utils.R"))
 
 opt <- parse_args(OptionParser(option_list = list(
   make_option("--taxon",     type = "character"),
@@ -44,7 +46,11 @@ dir.create(opt$outdir, showWarnings = FALSE, recursive = TRUE)
 if (!nchar(opt$api_key)) stop("BOLD API key required (--api-key or BOLD_API_KEY).")
 bold.apikey(opt$api_key)
 
-geo     <- if (nchar(opt$geography)) str_split(opt$geography, ",")[[1]] |> str_squish() else NULL
+# geo <- if (nchar(opt$geography)) str_split(opt$geography, ",")[[1]] |> str_squish() else NULL
+geo <- parse_geo_arg(opt$geography)
+if (length(geo) == 0) geo <- NULL
+message("[fetch_bold] geography: ", if (is.null(geo)) "all" else paste(geo, collapse=", "))
+
 markers <- if (nchar(opt$markers))   str_split(opt$markers,   ",")[[1]] |> str_squish() else NULL
 
 # ---- 1. DISCOVER: candidate processids for taxon (+ geography where supported) ----
