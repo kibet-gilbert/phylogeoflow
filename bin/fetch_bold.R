@@ -14,6 +14,9 @@
 #
 # Inputs (flags):
 #   --taxon        genus/species/higher taxon      e.g. "Ceratitis"
+#   --taxon-rank   rank of --taxon, if known         e.g. "order" (disambiguates
+#                  GBIF lookups for homonyms, e.g. Diptera the order vs. the
+#                  unrelated plant genus/species of the same spelling)
 #   --geography    comma-sep countries              e.g. "Kenya,Uganda,Tanzania"
 #   --markers      comma-sep marker codes            e.g. "COI-5P,16S,ND6"
 #   --min-len      min nuc_basecount bp              (default 0)
@@ -33,13 +36,14 @@
 
 suppressMessages({
   library(optparse); library(BOLDconnectR); library(dplyr); library(readr)
-  library(stringr); library(taxize)
+  library(stringr); library(rgbif)
 })
 .script_dir <- dirname(sub("--file=", "", grep("--file=", commandArgs(), value = TRUE)))
 source(file.path(.script_dir, "geo_utils.R"))
 
 opt <- parse_args(OptionParser(option_list = list(
   make_option("--taxon",      type = "character"),
+  make_option("--taxon-rank", type = "character", default = "", dest = "taxon_rank"),
   make_option("--geography",  type = "character", default = ""),
   make_option("--markers",    type = "character", default = ""),
   make_option("--min-len",    type = "double", default = 0, dest = "min_len"),
@@ -80,31 +84,49 @@ markers <- if (nchar(opt$markers))   str_split(opt$markers,   ",")[[1]] |> str_s
 #
 # BOLD's own API has no "list children of taxon X" endpoint (TaxonData with
 # includeTree only walks UP the tree, to parents). So child names are pulled
-# from the GBIF backbone via taxize::downstream() — a stable, versioned,
-# no-auth-needed REST API that's comprehensive for animals at every rank.
-# (taxize also offers db="bold", which would match BOLD's own naming more
-# exactly, but its docs warn that backend scrapes the BOLD website and "may
-# work one day, fail the next" — not suitable for an unattended pipeline.
+# from the GBIF backbone directly via rgbif — a stable, versioned, no-auth
+# REST API. We call rgbif directly rather than via taxize::downstream(): the
+# latter's name resolver (get_gbifid_()) drops into an interactive "enter
+# rownumber" prompt whenever a name is ambiguous across ranks (e.g. "Diptera"
+# also matches unrelated plant/insect genera and species), which hangs forever
+# under a non-interactive apptainer/batch run. rgbif::name_backbone() never
+# prompts — it always deterministically returns its single best match. We
+# also pass along the taxon's own rank whenever we know it (--taxon-rank for
+# the top-level call, and the exact rank we just split at for every
+# recursive child), which resolves most homonym ambiguity outright.
 # Any GBIF child name BOLD doesn't recognise just comes back as "no records",
-# handled below, rather than corrupting the run.)
+# handled below, rather than corrupting the run.
+#
+# rank_ladder is intentionally just the core Linnaean ranks GBIF's backbone
+# stores as direct parent -> child links (order -> family -> genus -> species).
+# Informal in-between ranks (suborder, superfamily, subfamily, tribe, ...) are
+# usually not present as queryable nodes in that chain, so splitting on them
+# would silently return zero children; better to skip straight to a rank GBIF
+# can actually traverse.
 
-rank_ladder <- c("order", "suborder", "infraorder", "superfamily", "family",
-                  "subfamily", "tribe", "genus", "species")
+rank_ladder <- c("order", "family", "genus", "species")
 start_rank_idx <- match(opt$split_rank, rank_ladder)
 if (is.na(start_rank_idx)) stop("--split-rank must be one of: ", paste(rank_ladder, collapse = ", "))
+top_taxon_rank <- if (nchar(opt$taxon_rank)) opt$taxon_rank else NULL
 
 is_overflow_error <- function(e) grepl("more than 1M", conditionMessage(e), fixed = TRUE)
 
-get_children <- function(taxon, rank) {
+get_children <- function(taxon, rank, taxon_rank = NULL) {
   message(sprintf("  [taxonomy] resolving children of '%s' at rank '%s' via GBIF...", taxon, rank))
-  res <- tryCatch(taxize::downstream(taxon, db = "gbif", downto = rank), error = function(e) NULL)
-  if (is.null(res) || length(res) == 0) return(character(0))
-  df <- res[[1]]
-  if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) return(character(0))
-  # taxize's gbif column naming has varied across versions; try common candidates
-  name_col <- intersect(c("childtaxa_name", "name", "canonicalName", "scientificName"), names(df))
-  if (length(name_col) == 0) stop("Unrecognised taxize/gbif output columns: ", paste(names(df), collapse = ", "))
-  unique(na.omit(df[[name_col[1]]]))
+  hit <- tryCatch(
+    rgbif::name_backbone(name = taxon, rank = taxon_rank),
+    error = function(e) NULL
+  )
+  if (is.null(hit) || nrow(hit) == 0 || is.null(hit$usageKey[1]) || is.na(hit$usageKey[1])) return(character(0))
+  if ("matchType" %in% names(hit) && identical(hit$matchType[1], "NONE")) return(character(0))
+  kids <- tryCatch(
+    rgbif::name_usage(key = hit$usageKey[1], data = "children", rank = rank, limit = 1000)$data,
+    error = function(e) NULL
+  )
+  if (is.null(kids) || nrow(kids) == 0) return(character(0))
+  name_col <- intersect(c("canonicalName", "scientificName", "name"), names(kids))
+  if (length(name_col) == 0) return(character(0))
+  unique(na.omit(kids[[name_col[1]]]))
 }
 
 # a single, unsplit bold.public.search call for a taxon, scoped to zero, one,
@@ -120,7 +142,7 @@ search_call <- function(taxon, locations = NULL) {
 }
 
 # recursive discovery implementing the fallback ladder above
-discover_ids <- function(taxon, locations = NULL, rank_idx = start_rank_idx, depth = 0) {
+discover_ids <- function(taxon, locations = NULL, rank_idx = start_rank_idx, depth = 0, taxon_rank = top_taxon_rank) {
   scope_label <- if (is.null(locations)) taxon else sprintf("%s (%s)", taxon, paste(locations, collapse = ", "))
   message("[fetch_bold.R] searching: ", scope_label)
 
@@ -135,7 +157,7 @@ discover_ids <- function(taxon, locations = NULL, rank_idx = start_rank_idx, dep
       message("  [fetch_bold.R] '", scope_label, "' overflowed 1M; splitting across ",
               length(locations), " geography term(s)")
       return(unlist(lapply(locations, function(loc) {
-        discover_ids(taxon, locations = loc, rank_idx = rank_idx, depth = depth)
+        discover_ids(taxon, locations = loc, rank_idx = rank_idx, depth = depth, taxon_rank = taxon_rank)
       })))
     }
 
@@ -144,15 +166,16 @@ discover_ids <- function(taxon, locations = NULL, rank_idx = start_rank_idx, dep
       warning("  gave up splitting '", scope_label, "' — still over 1M at max depth. Skipping.")
       return(character(0))
     }
-    children <- get_children(taxon, rank_ladder[rank_idx])
+    child_rank <- rank_ladder[rank_idx]
+    children <- get_children(taxon, child_rank, taxon_rank = taxon_rank)
     if (length(children) == 0) {
-      warning("  no children resolved for '", taxon, "' at rank ", rank_ladder[rank_idx], " — skipping.")
+      warning("  no children resolved for '", taxon, "' at rank ", child_rank, " — skipping.")
       return(character(0))
     }
     message(sprintf("  [fetch_bold.R] '%s' overflowed 1M; splitting into %d %s(s)",
-                     scope_label, length(children), rank_ladder[rank_idx]))
+                     scope_label, length(children), child_rank))
     return(unlist(lapply(children, function(child) {
-      discover_ids(child, locations = locations, rank_idx = rank_idx + 1, depth = depth + 1)
+      discover_ids(child, locations = locations, rank_idx = rank_idx + 1, depth = depth + 1, taxon_rank = child_rank)
     })))
   }
 
