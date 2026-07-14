@@ -17,6 +17,10 @@
 #   --taxon-rank   rank of --taxon, if known         e.g. "order" (disambiguates
 #                  GBIF lookups for homonyms, e.g. Diptera the order vs. the
 #                  unrelated plant genus/species of the same spelling)
+#   --kingdom      kingdom of --taxon (default "Animalia") — GBIF's matcher
+#                  returns matchType="NONE" (no usageKey at all) rather than
+#                  guessing across a cross-kingdom homonym like "Diptera"
+#                  (insect order vs. plant genus) without this hint
 #   --geography    comma-sep countries              e.g. "Kenya,Uganda,Tanzania"
 #   --markers      comma-sep marker codes            e.g. "COI-5P,16S,ND6"
 #   --min-len      min nuc_basecount bp              (default 0)
@@ -44,6 +48,7 @@ source(file.path(.script_dir, "geo_utils.R"))
 opt <- parse_args(OptionParser(option_list = list(
   make_option("--taxon",      type = "character"),
   make_option("--taxon-rank", type = "character", default = "", dest = "taxon_rank"),
+  make_option("--kingdom",    type = "character", default = "Animalia"),
   make_option("--geography",  type = "character", default = ""),
   make_option("--markers",    type = "character", default = ""),
   make_option("--min-len",    type = "double", default = 0, dest = "min_len"),
@@ -107,23 +112,30 @@ markers <- if (nchar(opt$markers))   str_split(opt$markers,   ",")[[1]] |> str_s
 rank_ladder <- c("order", "family", "genus", "species")
 start_rank_idx <- match(opt$split_rank, rank_ladder)
 if (is.na(start_rank_idx)) stop("--split-rank must be one of: ", paste(rank_ladder, collapse = ", "))
-top_taxon_rank <- if (nchar(opt$taxon_rank)) opt$taxon_rank else NULL
+top_taxon_rank <- if (nchar(opt$taxon_rank)) tolower(opt$taxon_rank) else NULL
 
 is_overflow_error <- function(e) grepl("more than 1M", conditionMessage(e), fixed = TRUE)
 
-get_children <- function(taxon, rank, taxon_rank = NULL) {
+get_children <- function(taxon, rank, taxon_rank = NULL, kingdom = opt$kingdom) {
   message(sprintf("  [taxonomy] resolving children of '%s' at rank '%s' via GBIF...", taxon, rank))
   hit <- tryCatch(
-    rgbif::name_backbone(name = taxon, rank = taxon_rank),
+    rgbif::name_backbone(name = taxon, rank = taxon_rank, kingdom = kingdom),
     error = function(e) NULL
   )
-  if (is.null(hit) || nrow(hit) == 0 || is.null(hit$usageKey[1]) || is.na(hit$usageKey[1])) return(character(0))
-  if ("matchType" %in% names(hit) && identical(hit$matchType[1], "NONE")) return(character(0))
+  if (is.null(hit) || nrow(hit) == 0 || !("usageKey" %in% names(hit)) || is.na(hit$usageKey[1])) {
+    return(character(0))
+  }
   kids <- tryCatch(
     rgbif::name_usage(key = hit$usageKey[1], data = "children", rank = rank, limit = 1000)$data,
     error = function(e) NULL
   )
   if (is.null(kids) || nrow(kids) == 0) return(character(0))
+  # GBIF's children list includes synonyms/doubtful/misspelled entries
+  # alongside accepted names (e.g. "Agromyzides" next to "Agromyzidae") --
+  # keep only ACCEPTED ones, or every one of those gets sent to BOLD as a
+  # separate (wasted, noisy) search.
+  if ("status" %in% names(kids)) kids <- kids[kids$status == "ACCEPTED", , drop = FALSE]
+  if (nrow(kids) == 0) return(character(0))
   name_col <- intersect(c("canonicalName", "scientificName", "name"), names(kids))
   if (length(name_col) == 0) return(character(0))
   unique(na.omit(kids[[name_col[1]]]))
@@ -131,14 +143,35 @@ get_children <- function(taxon, rank, taxon_rank = NULL) {
 
 # a single, unsplit bold.public.search call for a taxon, scoped to zero, one,
 # or many locations passed together in one combined list (this is step 1 —
-# "without splitting" — geography is not partitioned across separate calls)
-search_call <- function(taxon, locations = NULL) {
+# "without splitting" — geography is not partitioned across separate calls).
+#
+# Throttled + retried with backoff: firing many bold.public.search calls back
+# to back (as rank-splitting does once a taxon fans out into ~150+ families)
+# can trip a server-side rate limit that fails *soft* — an empty result
+# instead of an HTTP error — which is indistinguishable from a genuine zero
+# unless we double-check it. A single empty response is therefore treated as
+# provisional, not final: it's retried a few times with increasing delay
+# before being accepted as "no records". Confirmed multi-thousand-record
+# families (e.g. Anthomyiidae) returning empty on the first try, but
+# non-empty on retry, is exactly the failure mode this guards against.
+search_call <- function(taxon, locations = NULL, retries = 3, base_delay = 2) {
   args <- list(taxonomy = list(taxon))
   if (!is.null(locations)) args$geography <- as.list(locations)
-  tryCatch(
-    do.call(bold.public.search, args),
-    error = function(e) if (is_overflow_error(e)) stop(e) else NULL
-  )
+  Sys.sleep(0.5)  # baseline throttle between any two search calls
+  for (attempt in seq_len(retries + 1)) {
+    res <- tryCatch(
+      do.call(bold.public.search, args),
+      error = function(e) if (is_overflow_error(e)) stop(e) else NULL
+    )
+    if (!is.null(res) && nrow(res) > 0) return(res)
+    if (attempt <= retries) {
+      wait <- base_delay * 2^(attempt - 1)
+      message(sprintf("  [fetch_bold.R] empty response for '%s' (attempt %d/%d) — retrying in %ds...",
+                       taxon, attempt, retries + 1, wait))
+      Sys.sleep(wait)
+    }
+  }
+  res  # NULL/empty after exhausting retries -> treated as genuine "no records" by the caller
 }
 
 # recursive discovery implementing the fallback ladder above
