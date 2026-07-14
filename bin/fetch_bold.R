@@ -49,7 +49,7 @@ markers <- if (nchar(opt$markers))   str_split(opt$markers,   ",")[[1]] |> str_s
 
 # ---- 1. DISCOVER: candidate processids for taxon (+ geography where supported) ----
 message("[fetch_bold.R] searching BOLD for: ", opt$taxon)
-hits <- bold.public.search(taxonomy = opt$taxon)
+hits <- bold.public.search(taxonomy = list(opt$taxon))
 if (is.null(hits) || nrow(hits) == 0) { message("no records"); quit(status = 0) }
 ids <- unique(hits$processid)
 message("[fetch_bold.R] candidate processids: ", length(ids))
