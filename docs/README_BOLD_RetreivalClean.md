@@ -45,6 +45,20 @@ The subworkflow (`BOLD_RETRIEVAL`) runs `FETCH_BOLD` then `CLEAN_BOLD`, emitting
 2. `bold.public.search` returns candidate records; confirm whether `processid` is returned directly or needs a follow-up call for the full ID set, and adjust the discovery step accordingly.
 3. BOLDconnectR has no standard biocontainer, so the BOLD processes need a small custom image (e.g. an `r-tidyverse` base plus `devtools::install_github("boldsystems-central/BOLDconnectR")` and Biostrings).
 
+> [!IMPORTANT]
+> BOLDSytems has a hard limit of 1million dataset per search. 
+> This means if you execute a search for an Order like `Diptera` it will hit the limit and throw an error.
+> To work around this error we execute an automated split search algorithm as follows:
+
+The custom search function `discover_ids()` is a single recursive function that follows exactly the sequence below, per `(taxon, location-scope)` pair:
+
+1. **Unsplit** — one `bold.public.search()` call, passing *all* `--geography` terms at once (via `geography = as.list(locations)`) if `geo` was given, or none at all.
+2. **If 1. fails, split into individual locations** if there's more than one geography term —  and recurse per location (each retrying step 1 first, scoped to that one location).
+3. **If a single location (or no location) still overflows** — split the taxon at `--split-rank` (default `"family"`) via GBIF, and recurse the *whole ladder* per child at the same location scope. So a child family that itself overflows for a given country will retry unsplit → geo-split → further rank-split, same as the top-level taxon would.
+4. Rank-splitting keeps recursing down `rank_ladder` up to `--max-depth` — geography splitting doesn't consume that budget, since it's a one-shot fan-out rather than a recursive escalation.
+
+One subtlety worth flagging: because geography-splitting recursion always retries step 1 at each new scope, a case like "Diptera in 5 countries, only 1 of which individually overflows" now correctly does 1 combined call → 5 per-country calls → rank-split only for the 1 overflowing country — rather than rank-splitting everything, which is what your stated order implies and what the earlier version didn't quite get right.
+
 ## Recommended validation
 
 Run on a tiny known set and inspect the cleaned output before scaling:

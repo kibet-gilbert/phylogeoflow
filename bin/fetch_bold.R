@@ -5,16 +5,23 @@
 # Same interface style as fetch_genbank.{sh,R}: taxon/geography/marker/length
 # params in, standardized raw output out. Discovery (bold.public.search) is
 # separated from fetch (bold.fetch) so the ID space can be partitioned into
-# batches — this is what lets a single run scale past the ~1M per-call ceiling.
+# batches. Note bold.public.search itself has a hard, non-recoverable ~1M
+# ceiling (errors instead of paginating). Fallback order on overflow: (1) try
+# the whole taxon unsplit (all --geography terms in one call, if given);
+# (2) split across individual geography terms; (3) split by taxonomic rank
+# (--split-rank, default "family", via GBIF), recursing up to --max-depth
+# ranks down. bold.fetch is then partitioned into --batch-sized chunks as before.
 #
 # Inputs (flags):
-#   --taxon       genus/species/higher taxon   e.g. "Ceratitis"
-#   --geography   comma-sep countries          e.g. "Kenya,Uganda,Tanzania"
-#   --markers     comma-sep marker codes        e.g. "COI-5P,16S,ND6"
-#   --min-len     min nuc_basecount bp          (default 0)
-#   --outdir      output dir                    (default ./out)
-#   --api-key     BOLD API key (or env BOLD_API_KEY)
-#   --batch       processids per bold.fetch call (default 5000)
+#   --taxon        genus/species/higher taxon      e.g. "Ceratitis"
+#   --geography    comma-sep countries              e.g. "Kenya,Uganda,Tanzania"
+#   --markers      comma-sep marker codes            e.g. "COI-5P,16S,ND6"
+#   --min-len      min nuc_basecount bp              (default 0)
+#   --outdir       output dir                        (default ./out)
+#   --api-key      BOLD API key (or env BOLD_API_KEY)
+#   --batch        processids per bold.fetch call     (default 5000)
+#   --split-rank   taxonomic rank to split at on 1M overflow (default "family")
+#   --max-depth    how many ranks down splitting may recurse (default 3)
 #
 # Outputs:
 #   bold_raw.rds   full BCDM dataframe (all retained columns)
@@ -25,20 +32,23 @@
 #   provisioning through a qualifying collaborator.
 
 suppressMessages({
-  library(optparse); library(BOLDconnectR); library(dplyr); library(readr); library(stringr)
+  library(optparse); library(BOLDconnectR); library(dplyr); library(readr)
+  library(stringr); library(taxize)
 })
 .script_dir <- dirname(sub("--file=", "", grep("--file=", commandArgs(), value = TRUE)))
 source(file.path(.script_dir, "geo_utils.R"))
 
 opt <- parse_args(OptionParser(option_list = list(
-  make_option("--taxon",     type = "character"),
-  make_option("--geography", type = "character", default = ""),
-  make_option("--markers",   type = "character", default = ""),
-  make_option("--min-len",   type = "double", default = 0, dest = "min_len"),
-  make_option("--outdir",    type = "character", default = "./out"),
-  make_option("--api-key",   type = "character", default = Sys.getenv("BOLD_API_KEY"),
+  make_option("--taxon",      type = "character"),
+  make_option("--geography",  type = "character", default = ""),
+  make_option("--markers",    type = "character", default = ""),
+  make_option("--min-len",    type = "double", default = 0, dest = "min_len"),
+  make_option("--outdir",     type = "character", default = "./out"),
+  make_option("--api-key",    type = "character", default = Sys.getenv("BOLD_API_KEY"),
               dest = "api_key"),
-  make_option("--batch",     type = "double", default = 5000)
+  make_option("--batch",      type = "double", default = 5000),
+  make_option("--split-rank", type = "character", default = "family", dest = "split_rank"),
+  make_option("--max-depth",  type = "double", default = 3, dest = "max_depth")
 )))
 stopifnot(!is.null(opt$taxon))
 dir.create(opt$outdir, showWarnings = FALSE, recursive = TRUE)
@@ -56,49 +66,104 @@ markers <- if (nchar(opt$markers))   str_split(opt$markers,   ",")[[1]] |> str_s
 # ---- 1. DISCOVER: candidate processids for taxon (+ geography where supported) ----
 # bold.public.search has a hard, non-recoverable ~1M-record ceiling: it errors
 # out ("Search has more than 1M records") rather than throttling or paginating.
-# There is no way to page around this at the API level, so for big taxa the
-# *search* itself must be partitioned. geography is the natural partition key:
-# pass one location at a time so each individual search call stays under the
-# ceiling, then merge + dedupe the resulting processids before bold.fetch.
-search_one <- function(location = NULL) {
-  args <- list(taxonomy = list(opt$taxon))
-  if (!is.null(location)) args$geography <- list(location)
+# Fallback ladder, tried in order for every (taxon, location-scope) pair:
+#   1. Unsplit: one bold.public.search call, passing all --geography terms at
+#      once (or none, if --geography wasn't given).
+#   2. If that overflows and there's more than one geography term to split,
+#      fall back to one search per individual location.
+#   3. If a single location (or no location) still overflows, split the taxon
+#      itself at --split-rank (default "family") and recurse the WHOLE ladder
+#      per child at the same location scope — so a child can itself fall back
+#      to per-location splitting, then a further rank split, etc.
+#   4. Keep recursing rank-by-rank (rank_ladder) up to --max-depth taxonomic
+#      splits (geography splitting doesn't consume this budget).
+#
+# BOLD's own API has no "list children of taxon X" endpoint (TaxonData with
+# includeTree only walks UP the tree, to parents). So child names are pulled
+# from the GBIF backbone via taxize::downstream() — a stable, versioned,
+# no-auth-needed REST API that's comprehensive for animals at every rank.
+# (taxize also offers db="bold", which would match BOLD's own naming more
+# exactly, but its docs warn that backend scrapes the BOLD website and "may
+# work one day, fail the next" — not suitable for an unattended pipeline.
+# Any GBIF child name BOLD doesn't recognise just comes back as "no records",
+# handled below, rather than corrupting the run.)
+
+rank_ladder <- c("order", "suborder", "infraorder", "superfamily", "family",
+                  "subfamily", "tribe", "genus", "species")
+start_rank_idx <- match(opt$split_rank, rank_ladder)
+if (is.na(start_rank_idx)) stop("--split-rank must be one of: ", paste(rank_ladder, collapse = ", "))
+
+is_overflow_error <- function(e) grepl("more than 1M", conditionMessage(e), fixed = TRUE)
+
+get_children <- function(taxon, rank) {
+  message(sprintf("  [taxonomy] resolving children of '%s' at rank '%s' via GBIF...", taxon, rank))
+  res <- tryCatch(taxize::downstream(taxon, db = "gbif", downto = rank), error = function(e) NULL)
+  if (is.null(res) || length(res) == 0) return(character(0))
+  df <- res[[1]]
+  if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) return(character(0))
+  # taxize's gbif column naming has varied across versions; try common candidates
+  name_col <- intersect(c("childtaxa_name", "name", "canonicalName", "scientificName"), names(df))
+  if (length(name_col) == 0) stop("Unrecognised taxize/gbif output columns: ", paste(names(df), collapse = ", "))
+  unique(na.omit(df[[name_col[1]]]))
+}
+
+# a single, unsplit bold.public.search call for a taxon, scoped to zero, one,
+# or many locations passed together in one combined list (this is step 1 —
+# "without splitting" — geography is not partitioned across separate calls)
+search_call <- function(taxon, locations = NULL) {
+  args <- list(taxonomy = list(taxon))
+  if (!is.null(locations)) args$geography <- as.list(locations)
   tryCatch(
     do.call(bold.public.search, args),
-    error = function(e) {
-      if (grepl("more than 1M", conditionMessage(e), fixed = TRUE)) {
-        scope <- if (is.null(location)) "worldwide" else location
-        message(sprintf(
-          "  [fetch_bold.R] search still exceeds 1M records for %s (%s) — skipping; ",
-          opt$taxon, scope),
-          "subdivide further (e.g. by country, or by a lower taxonomic rank ",
-          "such as family/genus) and re-run for that subset.")
-        NULL
-      } else {
-        stop(e)
-      }
-    }
+    error = function(e) if (is_overflow_error(e)) stop(e) else NULL
   )
 }
 
-message("[fetch_bold.R] searching BOLD for: ", opt$taxon)
-if (!is.null(geo)) {
-  message("[fetch_bold.R] partitioning search across ", length(geo), " geography term(s)")
-  hits_list <- lapply(geo, function(location) {
-    message("  searching: ", location)
-    search_one(location)
-  })
-  hits <- bind_rows(Filter(Negate(is.null), hits_list))
-} else {
-  hits <- search_one()
-  if (is.null(hits)) {
-    stop("Search exceeded the 1M-record ceiling. Re-run with --geography ",
-         "\"Location1,Location2,...\" (or a narrower taxon) to partition the search.")
+# recursive discovery implementing the fallback ladder above
+discover_ids <- function(taxon, locations = NULL, rank_idx = start_rank_idx, depth = 0) {
+  scope_label <- if (is.null(locations)) taxon else sprintf("%s (%s)", taxon, paste(locations, collapse = ", "))
+  message("[fetch_bold.R] searching: ", scope_label)
+
+  # ---- step 1: unsplit search ----
+  hits <- tryCatch(search_call(taxon, locations), error = function(e) e)
+
+  if (inherits(hits, "error")) {
+    if (!is_overflow_error(hits)) stop(hits)
+
+    # ---- step 2: split by individual geography terms ----
+    if (!is.null(locations) && length(locations) > 1) {
+      message("  [fetch_bold.R] '", scope_label, "' overflowed 1M; splitting across ",
+              length(locations), " geography term(s)")
+      return(unlist(lapply(locations, function(loc) {
+        discover_ids(taxon, locations = loc, rank_idx = rank_idx, depth = depth)
+      })))
+    }
+
+    # ---- step 3/4: split by taxonomic rank, same location scope, recurse ----
+    if (depth >= opt$max_depth || rank_idx > length(rank_ladder)) {
+      warning("  gave up splitting '", scope_label, "' — still over 1M at max depth. Skipping.")
+      return(character(0))
+    }
+    children <- get_children(taxon, rank_ladder[rank_idx])
+    if (length(children) == 0) {
+      warning("  no children resolved for '", taxon, "' at rank ", rank_ladder[rank_idx], " — skipping.")
+      return(character(0))
+    }
+    message(sprintf("  [fetch_bold.R] '%s' overflowed 1M; splitting into %d %s(s)",
+                     scope_label, length(children), rank_ladder[rank_idx]))
+    return(unlist(lapply(children, function(child) {
+      discover_ids(child, locations = locations, rank_idx = rank_idx + 1, depth = depth + 1)
+    })))
   }
+
+  if (is.null(hits) || nrow(hits) == 0) { message("  no records for ", scope_label); return(character(0)) }
+  unique(hits$processid)
 }
-if (is.null(hits) || nrow(hits) == 0) { message("no records"); quit(status = 0) }
-ids <- unique(hits$processid)
+
+message("[fetch_bold.R] resolving processid list for: ", opt$taxon)
+ids <- unique(discover_ids(opt$taxon, locations = geo))
 message("[fetch_bold.R] candidate processids: ", length(ids))
+if (length(ids) == 0) { message("no records"); quit(status = 0) }
 
 # ---- 2. PARTITION ids and FETCH each batch (beats the per-call ceiling) ----
 batches <- split(ids, ceiling(seq_along(ids) / opt$batch))
@@ -123,6 +188,7 @@ if (nrow(bcdm) == 0) { message("no records after fetch"); quit(status = 0) }
 
 # optional marker filter (bold.fetch may return all markers for a specimen)
 if (!is.null(markers)) bcdm <- filter(bcdm, marker_code %in% markers)
+bcdm <- distinct(bcdm, processid, .keep_all = TRUE)  # dedupe in case of overlapping splits
 
 saveRDS(bcdm, file.path(opt$outdir, "bold_raw.rds"))
 write_tsv(bcdm, file.path(opt$outdir, "bold_raw.tsv"))
