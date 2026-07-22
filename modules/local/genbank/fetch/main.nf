@@ -34,7 +34,7 @@ process FETCH_GENBANK_EDIRECT {
 
     input:
     tuple val(meta), val(spec)
-    path(geo_file), stageAs: 'geography.txt'
+    // path(geo_file), stageAs: 'geography.txt'
 
     output:
     tuple val(meta), val('edirect'), path("out/*") , emit: raw

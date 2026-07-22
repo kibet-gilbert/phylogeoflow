@@ -29,7 +29,9 @@ process FETCH_BOLD {
     secret 'BOLD_API_KEY'
 
     conda "conda-forge::r-tidyverse conda-forge::r-optparse conda-forge::r-rgbif conda-forge::r-remotes"
-    container "${ params.bold_container ?: 'quay.io/biocontainers/r-tidyverse:2.0.0' }"
+    container "${ workflow.containerEngine == 'singularity' ?
+        'params.bold_container' : 
+        'oras://docker.io/kibetgilbert/boldconnectr:v1.0.1' }"
 
     input:
     tuple val(meta), val(spec)

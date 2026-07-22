@@ -19,7 +19,7 @@ nextflow.enable.dsl = 2
 */
 
 include { PHYLOGEOFLOW           } from './workflows/phylogeoflow'
-include { validateParameters ; paramsSummaryLog } from 'plugin/nf-schema'
+include { validateParameters ; paramsSummaryLog ; paramsHelp } from 'plugin/nf-schema'
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -30,18 +30,24 @@ include { validateParameters ; paramsSummaryLog } from 'plugin/nf-schema'
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
 
-def logo = """\
+def logo() {
+    return """\
 -\033[2m----------------------------------------------------\033[0m-
 \033[0;34m  phylogeoflow \033[0;35mv${workflow.manifest.version}\033[0m
 \033[0;34m  phylo + phylogeographic meta-analysis for any taxon\033[0m
 -\033[2m----------------------------------------------------\033[0m-
 """.stripIndent()
+}
+
+def toMarkerList(m) {
+    return (m instanceof List) ? m : m.toString().tokenize(',')*.trim()
+}
 
 // --version (handled here; --help is handled by the plugin)
-if (params.version) {
-    log.info "${workflow.manifest.name} v${workflow.manifest.version}"
-    System.exit(0)
-}
+// if (params.version) {
+//     log.info "${workflow.manifest.name} v${workflow.manifest.version}"
+//     System.exit(0)
+// }
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -51,39 +57,56 @@ if (params.version) {
 
 workflow {
 
-    log.info logo
+    main:
 
-    // validate params against the schema (nf-schema)
-    if (!params.skip_validation) {
-        validateParameters()
-    }
-    log.info paramsSummaryLog(workflow)
-
-    // ---- assemble the per-taxon query spec ----
-    // Priority: explicit params override anything loaded from a taxa YAML via -params-file.
-    if (!params.target_taxon) {
-        error "ERROR: --target_taxon is required (e.g. --target_taxon Ceratitis). Use --help for options."
+    // --version (handled here; --help is handled by the plugin)
+    if (params.version) {
+        log.info "${workflow.manifest.name} v${workflow.manifest.version}"
+        System.exit(0)
     }
 
-    def meta = [ id: (params.run_id ?: params.target_taxon.toString().toLowerCase().replaceAll(/\\s+/, '_')) ]
-    def spec = [
-        taxon         : params.target_taxon,
-        taxon_rank    : params.taxon_rank,
-        markers       : params.markers,
-        geography     : params.geography,
-        country_codes : params.country_codes,
-        min_len       : params.min_seq_len,
-        max_len       : params.max_seq_len,
-        min_year      : params.min_year
-    ]
+    log.info logo()
 
-    ch_meta_spec = Channel.of( tuple(meta, spec) )
+    if (params.help || params.helpFull) {
+        log.info paramsHelp(command: "nextflow run kibet-gilbert/phylogeoflow --target_taxon Ceratitis --outdir results -profile apptainer")
+        System.exit(0)
+    }
+    
+    if (!params.help && !params.helpFull) {
+    
+        // validate params against the schema (nf-schema)
+        if (!params.skip_validation) {
+            validateParameters()
+        }
+        log.info paramsSummaryLog(workflow)
+    
+        // ---- assemble the per-taxon query spec ----
+        // Priority: explicit params override anything loaded from a taxa YAML via -params-file.
+        if (!params.target_taxon) {
+            error "ERROR: --target_taxon is required (e.g. --target_taxon Ceratitis). Use --help for options."
+        }
+    
+        def meta = [ id: (params.run_id ?: params.target_taxon.toString().toLowerCase().replaceAll(/\\s+/, '_')) ]
+    
+        def spec = [
+            taxon         : params.target_taxon,
+            taxon_rank    : params.taxon_rank,
+            markers       : toMarkerList(params.markers),
+            geography     : params.geography,
+            country_codes : params.country_codes,
+            min_len       : params.min_seq_len,
+            max_len       : params.max_seq_len,
+            min_year      : params.min_year
+        ]
+    
+        ch_meta_spec = Channel.of( tuple(meta, spec) )
+    
+        PHYLOGEOFLOW( ch_meta_spec )
+    }
 
-    PHYLOGEOFLOW( ch_meta_spec )
-}
-
-workflow.onComplete {
+    onComplete: 
     log.info ( workflow.success
         ? "\n[phylogeoflow] Completed successfully. Results in: ${params.outdir}\n"
         : "\n[phylogeoflow] Completed with errors. Check .nextflow.log\n" )
 }
+
